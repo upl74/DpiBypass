@@ -20,7 +20,14 @@ object HostsAssets {
         return out.absolutePath
     }
 
-    /** @deprecated Авто-inject -H ломает YouTube (gstatic и др. вне списка). */
-    @Deprecated("Do not auto-inject; breaks non-listed Google hosts")
-    fun withGoogleHosts(cmd: String, context: Context): String = cmd
+    /** Inline `-H:"…"` from asset — только с полным list-google.txt (все домены YT). */
+    fun googleHostsSwitch(context: Context): String {
+        val hosts = context.assets.open(GOOGLE_HOSTS_ASSET).bufferedReader().use { reader ->
+            reader.lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+                .joinToString(" ")
+        }
+        return "-H:\"$hosts\""
+    }
 }

@@ -14,7 +14,7 @@ object DpiDefaults {
 
     private const val PREFS_VERSION_KEY = "dpi_defaults_version"
 
-    const val CURRENT_VERSION = 17
+    const val CURRENT_VERSION = 18
 
 
 
@@ -80,13 +80,27 @@ object DpiDefaults {
         "$BIND -Ku -a3 -Kt,h $LADDER_FULL -r1+s -S -a1 -As -Kt,h $LADDER_FULL -S -a1"
 
     /**
-     * МТС / MGTS — агрессивный OOB + split (byedpi #405, Android 2026).
-     * Без -S (слабо на Android) и без -H (whitelist рвёт gstatic).
+     * МТС #405 Android (lav89): -Qr заменён на -f-1 -r2+s.
+     * @see <a href="https://github.com/hufrea/byedpi/issues/405">byedpi #405</a>
      */
-    const val PRESET_MTS_YOUTUBE =
-        "$BIND -Ku -a5 -Kt,h -o1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s " +
-        "-At,r,s -d1 -f-1 -r2+s -An " +
-        "-Kt,h $LADDER_FULL -r1+s -a1 -As -Kt,h $LADDER_FULL -r1+s -a1"
+    const val PRESET_MTS_405 =
+        "$BIND -Kt,h -o1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s " +
+        "-a1 -At,r,s -d1 -f-1 -r2+s -An"
+
+    /** МТС #405 + QUIC fake (googlevideo). */
+    const val PRESET_MTS_405_QUIC =
+        "$BIND -Ku -a3 -Kt,h -o1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s " +
+        "-a1 -At,r,s -d1 -f-1 -r2+s -An"
+
+    /** МТС hagnozo + полный whitelist Google (list-google.txt). */
+    fun mtsHostsPreset(context: Context): String {
+        val h = HostsAssets.googleHostsSwitch(context)
+        return "$BIND $h -Kt,h -o1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s " +
+            "-a1 -An -Kt,h -At,r,s -d1 -f-1 -r2+s -An -Ku -a3"
+    }
+
+    /** @deprecated use [PRESET_MTS_405] */
+    const val PRESET_MTS_YOUTUBE = PRESET_MTS_405_QUIC
 
     /** Запасной для МТС — disorder + fake + UDP. */
     const val PRESET_MTS_ALT =
@@ -99,14 +113,35 @@ object DpiDefaults {
 
     fun youtubeMobilePreset(_context: Context): String = PRESET_YOUTUBE_MOBILE
 
-    fun mtsYoutubePreset(_context: Context): String = PRESET_MTS_YOUTUBE
+    fun mtsYoutubePreset(_context: Context): String = PRESET_MTS_405_QUIC
 
     fun litePreset(_context: Context): String = PRESET_GOODBYEDPI_LITE
 
     fun defaultYoutubePreset(context: Context): String = when {
-        NetworkHelper.isMts(context) -> PRESET_MTS_YOUTUBE
+        NetworkHelper.isMts(context) -> PRESET_MTS_405_QUIC
         NetworkHelper.isCellular(context) -> PRESET_YOUTUBE_MOBILE
         else -> PRESET_YOUTUBE_BASE
+    }
+
+    /** Порядок кандидатов для runtime-probe на сотовой сети. */
+    fun cellularProbePresets(context: Context, savedCmd: String?): List<String> {
+        val isMts = NetworkHelper.isMts(context)
+        val candidates = mutableListOf<String>()
+        if (isMts) {
+            candidates += mtsHostsPreset(context)
+            candidates += PRESET_MTS_405_QUIC
+            candidates += PRESET_MTS_405
+            candidates += PRESET_MTS_ALT
+        }
+        savedCmd?.trim()?.takeIf { it.isNotEmpty() }?.let { candidates += it }
+        if (!isMts) {
+            candidates += PRESET_YOUTUBE_MOBILE
+        }
+        candidates += PRESET_YOUTUBE_BASE
+        candidates += PRESET_GOODBYEDPI_LITE
+        candidates += PRESET_HYBRID
+        candidates += PRESET_MINIMAL
+        return candidates.distinct()
     }
 
     /** @deprecated use [PRESET_YOUTUBE] */
@@ -187,7 +222,7 @@ object DpiDefaults {
         val editor = prefs.edit().putInt(PREFS_VERSION_KEY, CURRENT_VERSION)
         when {
             version == 0 -> applyFreshInstall(editor, context)
-            version < 17 -> applyMtsPresetFix(editor, context, prefs)
+            version < 18 -> applyCellularProbeFix(editor, context, prefs)
         }
         editor.apply()
     }
@@ -210,8 +245,8 @@ object DpiDefaults {
             .putString("dns_ip", "")
     }
 
-    /** v17: пресет МТС для оператора МТС/MGTS. */
-    private fun applyMtsPresetFix(
+    /** v18: runtime-probe пресетов + обновлённые MTS #405. */
+    private fun applyCellularProbeFix(
         editor: android.content.SharedPreferences.Editor,
         context: Context,
         prefs: android.content.SharedPreferences,
@@ -220,7 +255,11 @@ object DpiDefaults {
         if (preset in YOUTUBE_PRESETS) {
             editor.putString("byedpi_cmd_args", defaultYoutubePreset(context))
         }
+        editor.remove("byedpi_cellular_working_cmd")
         editor.putBoolean("ipv6_enable", false)
+        if (NetworkHelper.isMts(context) && prefs.getString("dns_ip", "")?.isBlank() != false) {
+            editor.putString("dns_ip", "9.9.9.9")
+        }
     }
 
     private val YOUTUBE_PRESETS = setOf(

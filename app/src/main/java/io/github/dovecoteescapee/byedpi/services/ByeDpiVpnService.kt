@@ -21,6 +21,7 @@ import io.github.dovecoteescapee.byedpi.data.*
 import io.github.dovecoteescapee.byedpi.utility.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -191,14 +192,100 @@ class ByeDpiVpnService : LifecycleVpnService() {
             throw IllegalStateException("Proxy fields not null")
         }
 
-        val listenFd = openProxySocket()
-        if (listenFd < 0) {
+        val selection = openProxyWithProbe()
+        if (selection == null) {
             throw IllegalStateException("ByeDPI failed to start")
         }
 
-        proxyJob = lifecycleScope.launch(Dispatchers.IO) {
-            val code = byeDpiProxy.runLoop()
+        proxyJob = selection.loopJob
+        Log.i(TAG, "Proxy listening on fd ${selection.listenFd}")
+    }
 
+    private data class ProxySelection(
+        val listenFd: Int,
+        val loopJob: Job,
+        val cmd: String?,
+    )
+
+    private suspend fun openProxyWithProbe(): ProxySelection? {
+        val shared = getPreferences()
+        val tgWs = shared.getBoolean("tg_ws_telegram", true)
+        val port = sessionSocksPort
+        val cellular = NetworkHelper.isCellular(this)
+        val isMts = NetworkHelper.isMts(this)
+        if (cellular) {
+            Log.i(
+                TAG,
+                "Cellular: ${NetworkHelper.carrierLabel(this)} " +
+                    "mnc=${NetworkHelper.activeOperatorCode(this)} mts=$isMts",
+            )
+        }
+
+        val attempts = buildProxyAttempts(shared, tgWs, port, cellular, isMts)
+        val probe = cellular
+
+        for (preferences in attempts) {
+            byeDpiProxy.reset()
+            logPresetTry(preferences)
+
+            val fd = byeDpiProxy.openSocket(preferences)
+            if (fd < 0) continue
+
+            val loopJob = lifecycleScope.launch(Dispatchers.IO) {
+                val code = byeDpiProxy.runLoop()
+                withContext(Dispatchers.Main) {
+                    if (code != 0) {
+                        Log.e(TAG, "Proxy stopped with code $code")
+                        updateStatus(ServiceStatus.Failed)
+                    } else if (!stopping) {
+                        stop()
+                        updateStatus(ServiceStatus.Disconnected)
+                    }
+                }
+            }
+            delay(350)
+
+            val ok = if (probe) {
+                withContext(Dispatchers.IO) {
+                    PresetProbe.testBypass(port)
+                }
+            } else {
+                true
+            }
+
+            if (ok) {
+                val cmd = (preferences as? ByeDpiProxyCmdPreferences)?.args?.joinToString(" ")
+                if (cellular && cmd != null) {
+                    shared.edit()
+                        .putString("byedpi_cellular_working_cmd", cmd)
+                        .apply()
+                    Log.i(TAG, "Cellular probe selected preset")
+                }
+                return ProxySelection(fd, loopJob, cmd)
+            }
+
+            Log.w(TAG, "Preset failed probe, trying next")
+            byeDpiProxy.stopProxy()
+            loopJob.join()
+            byeDpiProxy.reset()
+        }
+
+        Log.e(TAG, "All cellular probes failed — falling back to default preset")
+        return openFallbackPreset(port, cellular)
+    }
+
+    private suspend fun openFallbackPreset(port: Int, cellular: Boolean): ProxySelection? {
+        val cmd = if (cellular) {
+            DpiDefaults.defaultYoutubePreset(this)
+        } else {
+            DpiDefaults.youtubePreset(this)
+        }
+        val patched = LocalSocksPort.patchCmdPort(cmd, port)
+        byeDpiProxy.reset()
+        val fd = byeDpiProxy.openSocket(ByeDpiProxyCmdPreferences(patched))
+        if (fd < 0) return null
+        val loopJob = lifecycleScope.launch(Dispatchers.IO) {
+            val code = byeDpiProxy.runLoop()
             withContext(Dispatchers.Main) {
                 if (code != 0) {
                     Log.e(TAG, "Proxy stopped with code $code")
@@ -209,67 +296,66 @@ class ByeDpiVpnService : LifecycleVpnService() {
                 }
             }
         }
-
-        Log.i(TAG, "Proxy listening on fd $listenFd")
+        return ProxySelection(fd, loopJob, patched)
     }
 
-    private suspend fun openProxySocket(): Int {
-        val shared = getPreferences()
-        val tgWs = shared.getBoolean("tg_ws_telegram", true)
-        val port = sessionSocksPort
-        val cellular = NetworkHelper.isCellular(this)
-        val isMts = NetworkHelper.isMts(this)
-        if (cellular) {
-            Log.i(TAG, "Cellular operator: ${NetworkHelper.carrierLabel(this)} (mts=$isMts)")
-        }
+    private fun buildProxyAttempts(
+        shared: android.content.SharedPreferences,
+        tgWs: Boolean,
+        port: Int,
+        cellular: Boolean,
+        isMts: Boolean,
+    ): List<ByeDpiProxyPreferences> {
         val ytPreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubePreset(this), port)
         val ytMobilePreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubeMobilePreset(this), port)
-        val mtsPreset = LocalSocksPort.patchCmdPort(DpiDefaults.mtsYoutubePreset(this), port)
-        val mtsAltPreset = LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MTS_ALT, port)
         val litePreset = LocalSocksPort.patchCmdPort(DpiDefaults.litePreset(this), port)
+        val savedCmd = shared.getString("byedpi_cmd_args", null)?.trim().orEmpty()
+        val lastWorking = shared.getString("byedpi_cellular_working_cmd", null)?.trim().orEmpty()
 
-        val attempts = buildList {
-            if (isMts && cellular) {
-                add(ByeDpiProxyCmdPreferences(mtsPreset))
-                add(ByeDpiProxyCmdPreferences(mtsAltPreset))
+        val cmdCandidates = if (cellular) {
+            buildList {
+                if (lastWorking.isNotEmpty()) add(lastWorking)
+                addAll(DpiDefaults.cellularProbePresets(this@ByeDpiVpnService, savedCmd))
+            }.distinct()
+        } else if (shared.getBoolean("byedpi_enable_cmd_settings", false) && savedCmd.isNotEmpty()) {
+            listOf(savedCmd)
+        } else {
+            emptyList()
+        }
+
+        return buildList {
+            for (cmd in cmdCandidates) {
+                add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(cmd, port)))
             }
-            if (shared.getBoolean("byedpi_enable_cmd_settings", false)) {
-                val cmd = shared.getString("byedpi_cmd_args", null)?.trim().orEmpty()
-                if (cmd.isNotEmpty()) {
-                    add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(cmd, port)))
+            if (!cellular) {
+                if (tgWs) {
+                    add(ByeDpiProxyCmdPreferences(ytPreset))
+                    add(
+                        ByeDpiProxyCmdPreferences(
+                            LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MEDIA_TCP, port),
+                        ),
+                    )
+                } else {
+                    add(ByeDpiProxyPreferences.fromSharedPreferences(shared, port))
                 }
+                add(ByeDpiProxyCmdPreferences(litePreset))
+                add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_HYBRID, port)))
+                add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MINIMAL, port)))
+                add(DpiDefaults.uiPreferences(port))
             }
-            if (cellular && !isMts) {
+            if (cellular && cmdCandidates.isEmpty()) {
                 add(ByeDpiProxyCmdPreferences(ytMobilePreset))
             }
-            if (tgWs) {
-                add(ByeDpiProxyCmdPreferences(ytPreset))
-                add(
-                    ByeDpiProxyCmdPreferences(
-                        LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MEDIA_TCP, port),
-                    ),
-                )
-            } else {
-                add(ByeDpiProxyPreferences.fromSharedPreferences(shared, port))
-            }
-            add(ByeDpiProxyCmdPreferences(litePreset))
-            add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_HYBRID, port)))
-            add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MINIMAL, port)))
-            add(DpiDefaults.uiPreferences(port))
         }
+    }
 
-        for (preferences in attempts) {
-            byeDpiProxy.reset()
-            when (preferences) {
-                is ByeDpiProxyCmdPreferences ->
-                    Log.i(TAG, "Trying cmd: ${preferences.args.joinToString(" ")}")
-                is ByeDpiProxyUIPreferences ->
-                    Log.i(TAG, "Trying UI preferences")
-            }
-            val fd = byeDpiProxy.openSocket(preferences)
-            if (fd >= 0) return fd
+    private fun logPresetTry(preferences: ByeDpiProxyPreferences) {
+        when (preferences) {
+            is ByeDpiProxyCmdPreferences ->
+                Log.i(TAG, "Trying cmd: ${preferences.args.joinToString(" ")}")
+            is ByeDpiProxyUIPreferences ->
+                Log.i(TAG, "Trying UI preferences")
         }
-        return -1
     }
 
     private suspend fun stopProxy() {
