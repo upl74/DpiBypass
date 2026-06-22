@@ -2,30 +2,26 @@
 
 from __future__ import annotations
 
-import subprocess
 import threading
-import tkinter.messagebox as mb
 from threading import Event
 
 import customtkinter as ctk
 
-from core.config import load_config, save_config
-from core.discord import launch_desktop
-from core.discord_autostart import persist_discord_preset
 from core.engine import BypassEngine
 from core.zapret_benchmark import run_benchmark
+from ui.discord_confirm import DiscordConfirmDialog
 
 BG = "#0F172A"
 SURFACE = "#1E293B"
 TEXT = "#F8FAFC"
 TEXT_MUTED = "#94A3B8"
 PRIMARY = "#0EA5E9"
-OK = "#22C55E"
 
 
 class DiscordTuneDialog(ctk.CTkToplevel):
     def __init__(self, master, engine: BypassEngine) -> None:
         super().__init__(master)
+        self.master = master
         self.engine = engine
         self._cancel = Event()
         self._done = False
@@ -46,7 +42,7 @@ class DiscordTuneDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             self,
-            text="Проверяем все general*.bat — выбираем лучший для Discord",
+            text="Быстрый отсев → полная проверка лучших кандидатов",
             font=ctk.CTkFont(size=12),
             text_color=TEXT_MUTED,
         ).pack(anchor="w", padx=20, pady=(0, 12))
@@ -100,7 +96,7 @@ class DiscordTuneDialog(ctk.CTkToplevel):
     def _on_progress(self, done: int, total: int, label: str, message: str) -> None:
         def ui() -> None:
             if total > 0:
-                self.progress.set(done / total)
+                self.progress.set(min(1.0, done / total))
             self.status.configure(text=f"[{done}/{total}] {label}")
             self._append_log(message)
 
@@ -124,78 +120,30 @@ class DiscordTuneDialog(ctk.CTkToplevel):
         if self._done:
             return
         self._done = True
-        self.btn_cancel.configure(text="Закрыть")
 
         if self._cancel.is_set():
+            self.btn_cancel.configure(text="Закрыть")
             self.status.configure(text="Отменено")
             return
 
-        if all_results:
-            ranked = sorted(
-                all_results,
-                key=lambda item: (-item.score, -item.ok_count, item.name.lower()),
-            )
-            self._append_log("\n--- Рейтинг пресетов ---")
-            for idx, item in enumerate(ranked[:5], start=1):
-                self._append_log(
-                    f"{idx}. {item.label}: балл {item.score}, {item.ok_count} OK"
-                )
-
-        if not best or score <= 0:
-            self.status.configure(text="Пресеты не прошли curl-проверку, применён general.bat")
-            self.progress.set(1)
-            cfg = persist_discord_preset("general.bat")
-            self._append_log("\n>>> Применён запасной пресет: general.bat (сохранён для автозагрузки)")
-            subprocess.run(
-                ["taskkill", "/IM", "Discord.exe", "/F"],
-                creationflags=0x08000000,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            try:
-                launch_desktop(cfg.socks_port)
-                if hasattr(self.master, "_sync_boot_switches"):
-                    self.master._sync_boot_switches()
-                mb.showwarning(
-                    "Discord",
-                    "Автотест не нашёл идеальный пресет.\n"
-                    "Применён general.bat — попробуйте Discord.\n\n"
-                    "Если не работает: запустите вручную нужный general*.bat из bin\\zapret\\",
-                    parent=self,
-                )
-            except Exception as exc:
-                mb.showerror("Discord", str(exc), parent=self)
-            return
-
-        cfg = persist_discord_preset(best)
         self.progress.set(1)
-        self.status.configure(
-            text=f"Выбран: {best} (балл {score})",
-            text_color=OK,
-        )
-        self._append_log(
-            f"\n>>> Лучший пресет: {best} (балл {score})\n"
-            ">>> Сохранён для автозагрузки Windows"
-        )
+        self.status.configure(text="Проверка завершена — выберите пресет…")
+        self.grab_release()
+        self.destroy()
 
-        subprocess.run(
-            ["taskkill", "/IM", "Discord.exe", "/F"],
-            creationflags=0x08000000,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-        try:
-            launch_desktop(cfg.socks_port)
+        def on_applied() -> None:
             if hasattr(self.master, "_sync_boot_switches"):
                 self.master._sync_boot_switches()
-            mb.showinfo(
-                "Discord",
-                f"Применён пресет:\n{best}\n\nDiscord запускается…",
-                parent=self,
-            )
-        except Exception as exc:
-            mb.showerror("Discord", str(exc), parent=self)
+            if hasattr(self.master, "_refresh_status"):
+                self.master._refresh_status()
+
+        DiscordConfirmDialog(
+            self.master,
+            self.engine,
+            all_results or [],
+            suggested=best,
+            on_applied=on_applied,
+        )
 
     def _on_cancel(self) -> None:
         if not self._done:
