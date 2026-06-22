@@ -130,14 +130,29 @@ class DiscordTuneDialog(ctk.CTkToplevel):
             return
 
         if not best or score <= 0:
-            self.status.configure(text="Не найден рабочий пресет")
-            self.progress.set(0)
-            mb.showerror(
-                "Discord",
-                "Ни один пресет zapret не прошёл проверку.\n"
-                "Попробуйте другого оператора / VPN DNS или обновите zapret (Компоненты).",
-                parent=self,
+            self.status.configure(text="Пресеты не прошли curl-проверку, применён general.bat")
+            self.progress.set(1)
+            cfg = load_config()
+            cfg.zapret_preset = "general.bat"
+            save_config(cfg)
+            self._append_log("\n>>> Применён запасной пресет: general.bat")
+            subprocess.run(
+                ["taskkill", "/IM", "Discord.exe", "/F"],
+                creationflags=0x08000000,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
+            try:
+                launch_desktop(cfg.socks_port)
+                mb.showwarning(
+                    "Discord",
+                    "Автотест не нашёл идеальный пресет.\n"
+                    "Применён general.bat — попробуйте Discord.\n\n"
+                    "Если не работает: запустите вручную нужный general*.bat из bin\\zapret\\",
+                    parent=self,
+                )
+            except Exception as exc:
+                mb.showerror("Discord", str(exc), parent=self)
             return
 
         cfg = load_config()

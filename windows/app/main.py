@@ -24,7 +24,7 @@ from core.winws import is_available as winws_available
 
 from ui.discord_tune import DiscordTuneDialog
 
-APP_VERSION = "1.3.6"
+APP_VERSION = "1.3.7"
 
 # Material 3 palette (synced with Android DpiBypass)
 PRIMARY = "#0EA5E9"

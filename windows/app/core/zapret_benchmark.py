@@ -9,7 +9,7 @@ from threading import Event
 from typing import Callable
 
 from .winws import WinWsService
-from .zapret_presets import ZapretPreset, list_presets
+from .zapret_presets import ZapretPreset, default_preset_name, list_presets
 
 CREATE_NO_WINDOW = 0x08000000
 
@@ -24,6 +24,12 @@ DISCORD_TARGETS: list[tuple[str, str, int]] = [
 
 DISCORD_MAX_SCORE = sum(w for _, _, w in DISCORD_TARGETS)
 
+_CURL_PROFILES: list[tuple[str, list[str]]] = [
+    ("TLS1.3", ["--tlsv1.3", "--tls-max", "1.3"]),
+    ("TLS1.2", ["--tlsv1.2", "--tls-max", "1.2"]),
+    ("HTTP", ["--http1.1"]),
+]
+
 ProgressCb = Callable[[int, int, str, str], None]
 DoneCb = Callable[[str | None, int, dict[str, dict[str, str]]], None]
 
@@ -37,44 +43,58 @@ class PresetScore:
 
 
 def probe_url(url: str, timeout: int = 5) -> tuple[bool, str]:
-    try:
-        result = subprocess.run(
-            [
-                "curl.exe",
-                "-I",
-                "-s",
-                "-m",
-                str(timeout),
-                "-o",
-                "NUL",
-                "-w",
-                "%{http_code}",
-                "--tlsv1.2",
-                "--tls-max",
-                "1.3",
-                url,
-            ],
-            capture_output=True,
-            text=True,
-            creationflags=CREATE_NO_WINDOW,
-            timeout=timeout + 3,
-        )
-        code = (result.stdout or "").strip()
-        if code.isdigit():
-            n = int(code)
-            if 200 <= n < 400 or n in (301, 302, 307, 308):
-                return True, code
-        err = (result.stderr or "").strip()
-        return False, code or err or f"exit={result.returncode}"
-    except subprocess.TimeoutExpired:
-        return False, "timeout"
-    except Exception as exc:
-        return False, str(exc)
+    """Как в zapret test zapret.ps1: успех если curl завершился с кодом 0."""
+    last = "no response"
+    for label, extra in _CURL_PROFILES:
+        try:
+            result = subprocess.run(
+                [
+                    "curl.exe",
+                    "-I",
+                    "-s",
+                    "-m",
+                    str(timeout),
+                    "-o",
+                    "NUL",
+                    "-w",
+                    "%{http_code}",
+                    "--show-error",
+                    *extra,
+                    url,
+                ],
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=timeout + 3,
+            )
+            code = (result.stdout or "").strip()
+            err = (result.stderr or "").lower()
+            last = f"{label}:{code or result.returncode}"
+
+            if any(
+                token in err
+                for token in (
+                    "could not resolve host",
+                    "certificate verify failed",
+                    "ssl certificate problem",
+                    "unable to get local issuer certificate",
+                )
+            ):
+                continue
+
+            if result.returncode == 0:
+                return True, last
+        except subprocess.TimeoutExpired:
+            last = f"{label}:timeout"
+        except Exception as exc:
+            last = f"{label}:{exc}"
+
+    return False, last
 
 
-def score_preset(winws: WinWsService, preset: ZapretPreset, settle_s: float = 2.0) -> PresetScore:
+def score_preset(winws: WinWsService, preset: ZapretPreset, settle_s: float = 5.0) -> PresetScore:
     winws.stop()
-    time.sleep(0.4)
+    time.sleep(0.6)
     winws.start_preset(preset.name)
     time.sleep(settle_s)
 
@@ -114,7 +134,16 @@ def run_benchmark(
                 preset.label,
                 f"Проверка: {preset.label}…",
             )
-            scored = score_preset(winws, preset)
+            try:
+                scored = score_preset(winws, preset)
+            except Exception as exc:
+                scored = PresetScore(
+                    name=preset.name,
+                    label=preset.label,
+                    score=0,
+                    details={"Ошибка": str(exc)},
+                )
+
             all_results[preset.name] = scored.details
             detail_line = " · ".join(
                 f"{k}: {v}" for k, v in scored.details.items()
@@ -137,8 +166,11 @@ def run_benchmark(
                 )
                 break
     finally:
-        if best_name:
-            winws.stop()
-            time.sleep(0.3)
-            winws.start_preset(best_name)
-        on_done(best_name, best_score, all_results)
+        chosen = best_name if best_score > 0 else default_preset_name()
+        winws.stop()
+        time.sleep(0.4)
+        try:
+            winws.start_preset(chosen)
+        except Exception:
+            pass
+        on_done(best_name if best_score > 0 else None, best_score, all_results)
