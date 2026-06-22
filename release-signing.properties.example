@@ -1,0 +1,5 @@
+# Copy to release-signing.properties in the project root (gitignored).
+# Or run: powershell -File scripts/setup-signing.ps1
+storePassword=your_store_password
+keyPassword=your_key_password
+keyAlias=dpibypass

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DpiBypass</string>
+    <string name="hero_title">Обход DPI</string>
+    <string name="status_section">Статус подключения</string>
+    <string name="app_info">TG через WS-прокси (tg-ws-proxy), YouTube/Instagram — локальный ByeDPI. После старта подтвердите прокси в Telegram.</string>
+    <string name="vpn_connect">Включить обход</string>
+    <string name="vpn_disconnect">Выключить</string>
+    <string name="vpn_connected">Обход DPI активен</string>
+    <string name="vpn_disconnected">Выключено</string>
+    <string name="proxy_up">Прокси запущен</string>
+    <string name="proxy_down">Прокси остановлен</string>
+    <string name="proxy_start">Запустить прокси</string>
+    <string name="proxy_stop">Остановить прокси</string>
+    <string name="settings">Настройки</string>
+    <string name="vpn_permission_denied">Нужно разрешение на локальный перехват трафика</string>
+    <string name="settings_unavailable">Остановите сервис перед изменением настроек</string>
+    <string name="title_settings">Настройки</string>
+    <string name="telegram_section">Telegram</string>
+    <string name="telegram_ws_apply">Применить WS-прокси в Telegram</string>
+    <string name="telegram_ws_applied">Открываю настройки прокси Telegram…</string>
+    <string name="telegram_ws_not_running">Сначала включите обход (WS-прокси запускается вместе с VPN)</string>
+    <string name="telegram_vpn_hint">После включения обхода подтвердите локальный прокси в Telegram (127.0.0.1:1443).</string>
+    <string name="tg_ws_telegram_setting">Telegram через WS-прокси</string>
+    <string name="tg_ws_telegram_summary">Локальный MTProto → WebSocket (как tg-ws-proxy-android)</string>
+    <string name="tg_ws_auto_apply_setting">Авто-применить прокси в Telegram</string>
+    <string name="tg_ws_auto_apply_summary">Открыть Telegram и предложить подключить локальный прокси</string>
+    <string name="vpn_notification_content">TG: WS · YT/IG: ByeDPI</string>
+    <string name="telegram_open_failed">Не удалось открыть Telegram</string>
+    <string name="only_target_apps_setting">Только TG, YouTube, Instagram</string>
+    <string name="only_target_apps_summary">Перехватывать трафик только этих приложений (рекомендуется)</string>
+    <string name="cmd_preset_setting">Пресет обхода DPI</string>
+    <string name="cmd_preset_summary">Универсальные настройки для любого оператора (МТС, T2, Билайн, Мегафон…)</string>
+    <string name="mode_setting">Режим</string>
+    <string name="notification_title">DpiBypass</string>
+    <string name="proxy_notification_content">Локальный SOCKS</string>
+    <string name="general_category">Общие</string>
+    <string name="ipv6_summary">Включить для мобильного интернета (иначе трафик может обходить VPN)</string>
+    <string name="no_target_apps">Не найдены Telegram/YouTube — установите приложения или отключите «Только TG/YT»</string>
+    <string name="no_target_apps_warn">TG/YouTube не обнаружены — VPN попробует найти их автоматически</string>
+    <string name="failed_to_start">Не удалось запустить %1$s</string>
+    <string name="vpn_start_failed_hint">Переустановите APK v1.0.3 или выберите пресет «Только YouTube» в настройках</string>
+</resources>

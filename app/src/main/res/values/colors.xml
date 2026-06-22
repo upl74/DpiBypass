@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="primary">#0EA5E9</color>
+    <color name="primary_dark">#0284C7</color>
+    <color name="primary_container">#E0F2FE</color>
+    <color name="on_primary_container">#0C4A6E</color>
+
+    <color name="secondary">#6366F1</color>
+    <color name="secondary_container">#EEF2FF</color>
+
+    <color name="background">#F1F5F9</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F8FAFC</color>
+    <color name="on_surface">#0F172A</color>
+    <color name="on_surface_variant">#64748B</color>
+    <color name="outline">#E2E8F0</color>
+
+    <color name="status_connected">#22C55E</color>
+    <color name="status_disconnected">#94A3B8</color>
+    <color name="disconnect">#EF4444</color>
+    <color name="disconnect_dark">#DC2626</color>
+
+    <color name="telegram_accent">#229ED9</color>
+</resources>

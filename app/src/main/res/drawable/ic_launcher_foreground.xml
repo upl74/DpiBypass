@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Shield body -->
+    <path
+        android:fillColor="#0EA5E9"
+        android:pathData="M54,18 L80,30 V52 C80,72 54,88 54,88 C54,88 28,72 28,52 V30 Z" />
+    <!-- Inner highlight -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,26 L72,34.5 V51 C72,66 54,78 54,78 C54,78 36,66 36,51 V34.5 Z" />
+    <!-- Bypass arrow -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,46 H58 L52,40 V44 H44 V58 H52 V62 L58,56 V46 Z" />
+    <!-- Speed lines -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.85"
+        android:pathData="M62,44 H68 V46 H62 Z M64,50 H70 V52 H64 Z M62,56 H66 V58 H62 Z" />
+</vector>

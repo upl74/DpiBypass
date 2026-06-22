@@ -1,0 +1,37 @@
+# Reference clone only — use project root for DpiBypass build
+_ref_byedpi/
+
+# Android
+.gradle/
+local.properties
+*.iml
+**/build/
+.externalNativeBuild/
+.cxx/
+captures/
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+
+# Windows
+windows/venv/
+windows/dist/
+windows/build/
+windows/bin/
+windows/**/*.exe
+windows/**/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys / signing
+*.jks
+*.keystore
+release-signing.properties
