@@ -218,18 +218,28 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val tgWs = shared.getBoolean("tg_ws_telegram", true)
         val port = sessionSocksPort
         val cellular = NetworkHelper.isCellular(this)
+        val isMts = NetworkHelper.isMts(this)
+        if (cellular) {
+            Log.i(TAG, "Cellular operator: ${NetworkHelper.carrierLabel(this)} (mts=$isMts)")
+        }
         val ytPreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubePreset(this), port)
         val ytMobilePreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubeMobilePreset(this), port)
+        val mtsPreset = LocalSocksPort.patchCmdPort(DpiDefaults.mtsYoutubePreset(this), port)
+        val mtsAltPreset = LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MTS_ALT, port)
         val litePreset = LocalSocksPort.patchCmdPort(DpiDefaults.litePreset(this), port)
 
         val attempts = buildList {
+            if (isMts && cellular) {
+                add(ByeDpiProxyCmdPreferences(mtsPreset))
+                add(ByeDpiProxyCmdPreferences(mtsAltPreset))
+            }
             if (shared.getBoolean("byedpi_enable_cmd_settings", false)) {
                 val cmd = shared.getString("byedpi_cmd_args", null)?.trim().orEmpty()
                 if (cmd.isNotEmpty()) {
                     add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(cmd, port)))
                 }
             }
-            if (cellular) {
+            if (cellular && !isMts) {
                 add(ByeDpiProxyCmdPreferences(ytMobilePreset))
             }
             if (tgWs) {

@@ -14,7 +14,7 @@ object DpiDefaults {
 
     private const val PREFS_VERSION_KEY = "dpi_defaults_version"
 
-    const val CURRENT_VERSION = 16
+    const val CURRENT_VERSION = 17
 
 
 
@@ -79,13 +79,35 @@ object DpiDefaults {
     const val PRESET_YOUTUBE_MOBILE =
         "$BIND -Ku -a3 -Kt,h $LADDER_FULL -r1+s -S -a1 -As -Kt,h $LADDER_FULL -S -a1"
 
+    /**
+     * МТС / MGTS — агрессивный OOB + split (byedpi #405, Android 2026).
+     * Без -S (слабо на Android) и без -H (whitelist рвёт gstatic).
+     */
+    const val PRESET_MTS_YOUTUBE =
+        "$BIND -Ku -a5 -Kt,h -o1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s " +
+        "-At,r,s -d1 -f-1 -r2+s -An " +
+        "-Kt,h $LADDER_FULL -r1+s -a1 -As -Kt,h $LADDER_FULL -r1+s -a1"
+
+    /** Запасной для МТС — disorder + fake + UDP. */
+    const val PRESET_MTS_ALT =
+        "$BIND -Ku -a8 -Kt,h -o1 -d1 -d3+s -s6+s -d9+s -s12+s -r1+s -a1 " +
+        "-At,r,s -d1 -f-1 -t 8 -r2+s -An"
+
     const val PRESET_YOUTUBE = PRESET_YOUTUBE_BASE
 
-    fun youtubePreset(_context: android.content.Context): String = PRESET_YOUTUBE_BASE
+    fun youtubePreset(_context: Context): String = PRESET_YOUTUBE_BASE
 
-    fun youtubeMobilePreset(_context: android.content.Context): String = PRESET_YOUTUBE_MOBILE
+    fun youtubeMobilePreset(_context: Context): String = PRESET_YOUTUBE_MOBILE
 
-    fun litePreset(_context: android.content.Context): String = PRESET_GOODBYEDPI_LITE
+    fun mtsYoutubePreset(_context: Context): String = PRESET_MTS_YOUTUBE
+
+    fun litePreset(_context: Context): String = PRESET_GOODBYEDPI_LITE
+
+    fun defaultYoutubePreset(context: Context): String = when {
+        NetworkHelper.isMts(context) -> PRESET_MTS_YOUTUBE
+        NetworkHelper.isCellular(context) -> PRESET_YOUTUBE_MOBILE
+        else -> PRESET_YOUTUBE_BASE
+    }
 
     /** @deprecated use [PRESET_YOUTUBE] */
     const val PRESET_MEDIA_TCP =
@@ -110,11 +132,9 @@ object DpiDefaults {
 
         "universal" -> PRESET_UNIVERSAL
 
-        "youtube", "youtube_video" -> if (NetworkHelper.isCellular(context)) {
-            youtubeMobilePreset(context)
-        } else {
-            youtubePreset(context)
-        }
+        "youtube", "youtube_video" -> defaultYoutubePreset(context)
+
+        "mts" -> mtsYoutubePreset(context)
 
         "media_tcp" -> PRESET_MEDIA_TCP
 
@@ -167,7 +187,7 @@ object DpiDefaults {
         val editor = prefs.edit().putInt(PREFS_VERSION_KEY, CURRENT_VERSION)
         when {
             version == 0 -> applyFreshInstall(editor, context)
-            version < 16 -> applyYoutubePresetFix(editor, context, prefs)
+            version < 17 -> applyMtsPresetFix(editor, context, prefs)
         }
         editor.apply()
     }
@@ -184,25 +204,21 @@ object DpiDefaults {
             .putBoolean("tg_ws_telegram", true)
             .putBoolean("tg_ws_auto_apply", true)
             .putString("byedpi_cmd_preset", "youtube")
-            .putString("byedpi_cmd_args", youtubePreset(context))
+            .putString("byedpi_cmd_args", defaultYoutubePreset(context))
             .putString("byedpi_proxy_ip", "127.0.0.1")
             .putString("byedpi_proxy_port", "1080")
             .putString("dns_ip", "")
     }
 
-    /** v16: убрать -H whitelist (ломал gstatic/googleapis — YouTube не грузился). */
-    private fun applyYoutubePresetFix(
+    /** v17: пресет МТС для оператора МТС/MGTS. */
+    private fun applyMtsPresetFix(
         editor: android.content.SharedPreferences.Editor,
         context: Context,
         prefs: android.content.SharedPreferences,
     ) {
         val preset = prefs.getString("byedpi_cmd_preset", "youtube") ?: "youtube"
         if (preset in YOUTUBE_PRESETS) {
-            editor.putString(
-                "byedpi_cmd_args",
-                if (NetworkHelper.isCellular(context)) youtubeMobilePreset(context)
-                else youtubePreset(context),
-            )
+            editor.putString("byedpi_cmd_args", defaultYoutubePreset(context))
         }
         editor.putBoolean("ipv6_enable", false)
     }
