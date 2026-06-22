@@ -26,8 +26,9 @@ from core.zapret_runtime import read_installed_version, version_label
 from core.discord_autostart import autostart_discord, should_autostart_discord
 
 from ui.discord_tune import DiscordTuneDialog
+from ui.tk_safe import is_alive, safe_after
 
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.4.7"
 
 # Material 3 palette (synced with Android DpiBypass)
 PRIMARY = "#0EA5E9"
@@ -77,6 +78,7 @@ class MainWindow(ctk.CTk):
         self._tray_thread = None
         self._preset_keys = list(PRESET_LABELS.keys())
         self._busy = False
+        self._quitting = False
 
         self.title("DpiBypass")
         self.geometry("460x700")
@@ -89,10 +91,10 @@ class MainWindow(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         if launched_autostart and self.cfg.minimize_to_tray:
-            self.after(300, self._hide_to_tray)
+            safe_after(self, 300, self._hide_to_tray)
 
         if self.cfg.auto_enable:
-            self.after(900, self._try_auto_enable)
+            safe_after(self, 900, self._try_auto_enable)
 
     def _card(self, parent, **kwargs) -> ctk.CTkFrame:
         return ctk.CTkFrame(
@@ -559,7 +561,7 @@ class MainWindow(ctk.CTk):
             ):
                 try:
                     relaunch_as_admin()
-                    self.after(400, self._quit_app)
+                    safe_after(self, 400, self._quit_app)
                 except OSError as err:
                     mb.showerror("DpiBypass", str(err))
             return
@@ -573,6 +575,8 @@ class MainWindow(ctk.CTk):
         self._refresh_status()
 
     def _try_auto_enable(self) -> None:
+        if self._quitting or not is_alive(self):
+            return
         if self.engine.active or self._busy:
             return
         self.cfg = load_config()
@@ -662,6 +666,8 @@ class MainWindow(ctk.CTk):
         )
 
     def _hide_to_tray(self) -> None:
+        if self._quitting or not is_alive(self):
+            return
         self._ensure_tray()
         self.withdraw()
 
@@ -671,13 +677,13 @@ class MainWindow(ctk.CTk):
         import pystray
 
         def show(_icon=None, _item=None):
-            self.after(0, self._show_from_tray)
+            safe_after(self, 0, self._show_from_tray)
 
         def toggle(_icon=None, _item=None):
-            self.after(0, self._toggle)
+            safe_after(self, 0, self._toggle)
 
         def quit_app(_icon=None, _item=None):
-            self.after(0, self._quit_app)
+            safe_after(self, 0, self._quit_app)
 
         menu = pystray.Menu(
             pystray.MenuItem("Открыть", show, default=True),
@@ -693,6 +699,8 @@ class MainWindow(ctk.CTk):
         self._tray_thread.start()
 
     def _show_from_tray(self) -> None:
+        if self._quitting or not is_alive(self):
+            return
         self.deiconify()
         self.lift()
         self.focus_force()
@@ -706,11 +714,34 @@ class MainWindow(ctk.CTk):
         self._quit_app()
 
     def _quit_app(self) -> None:
+        if self._quitting:
+            return
+        self._quitting = True
+
+        for child in list(self.winfo_children()):
+            try:
+                child.destroy()
+            except Exception:
+                pass
+
         if self.engine.active:
             self.engine.stop()
         if self._tray:
-            self._tray.stop()
-        self.destroy()
+            try:
+                self._tray.stop()
+            except Exception:
+                pass
+            self._tray = None
+
+        try:
+            self.quit()
+        except Exception:
+            pass
+        try:
+            if is_alive(self):
+                self.destroy()
+        except Exception:
+            pass
 
 
 def main() -> None:
@@ -742,7 +773,10 @@ def main() -> None:
                 "(ПКМ по DpiBypass.exe → Запуск от имени администратора).",
             )
 
-    app.mainloop()
+    try:
+        app.mainloop()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

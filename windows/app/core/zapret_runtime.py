@@ -9,7 +9,8 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
-from .paths import ZAPRET_ROOT, WINWS_EXE
+from .paths import ZAPRET_BIN_DIR, ZAPRET_ROOT, WINWS_EXE
+from .zapret_presets import resolve_preset_args
 
 CREATE_NO_WINDOW = 0x08000000
 ZAPRET_RELEASE = "1.9.9c"
@@ -103,17 +104,20 @@ def prepare_zapret() -> None:
 
 
 def launch_preset_bat(preset_name: str) -> subprocess.Popen:
-    """Запуск как в оригинальном zapret: service.bat + call general*.bat."""
+    """service.bat prep + winws.exe без консольного окна (general*.bat использует start)."""
     ensure_launcher()
     bat = ZAPRET_ROOT / preset_name
     if not bat.is_file():
         raise FileNotFoundError(f"Пресет не найден: {preset_name}")
 
+    prepare_zapret()
+    args = resolve_preset_args(preset_name)
+
     env = os.environ.copy()
     env["NO_UPDATE_CHECK"] = "1"
     return subprocess.Popen(
-        ["cmd.exe", "/c", str(LAUNCHER_BAT), preset_name],
-        cwd=str(ZAPRET_ROOT),
+        args,
+        cwd=str(ZAPRET_BIN_DIR),
         creationflags=CREATE_NO_WINDOW,
         env=env,
         stdout=subprocess.DEVNULL,

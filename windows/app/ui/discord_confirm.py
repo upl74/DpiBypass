@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import threading
+import time
 from typing import Callable
 
 import customtkinter as ctk
@@ -17,6 +18,7 @@ from core.engine import BypassEngine, ComponentId
 from core.zapret_benchmark import PresetScore, live_test_preset, rank_results
 from core.zapret_presets import default_preset_name
 from core.zapret_runtime import version_label
+from ui.tk_safe import is_alive, safe_after
 
 BG = "#0F172A"
 SURFACE = "#1E293B"
@@ -44,7 +46,8 @@ class DiscordConfirmDialog(ctk.CTkToplevel):
         self._testing = False
         self._last_live: PresetScore | None = None
 
-        ranked = rank_results([r for r in results if r.score > 0])
+        ranked = rank_results(results)
+        ranked = [r for r in ranked if r.score > 0] or ranked
         if not ranked and suggested:
             ranked = [
                 PresetScore(
@@ -73,89 +76,39 @@ class DiscordConfirmDialog(ctk.CTkToplevel):
         self._choice.set(default_name)
 
         self.title("Результаты проверки Discord")
-        self.geometry("580x580")
-        self.minsize(520, 500)
+        self.geometry("600x700")
+        self.minsize(540, 640)
         self.configure(fg_color=BG)
         self.transient(master)
         self.grab_set()
 
-        ctk.CTkLabel(
-            self,
-            text="Лучшие пресеты zapret",
-            font=ctk.CTkFont(size=18, weight="bold"),
-            text_color=TEXT,
-        ).pack(anchor="w", padx=20, pady=(18, 4))
+        # Нижняя панель — всегда видна (pack до контента)
+        footer = ctk.CTkFrame(self, fg_color=BG)
+        footer.pack(side="bottom", fill="x", padx=20, pady=(0, 16))
 
-        ctk.CTkLabel(
-            self,
-            text="Выберите → Проверить настройку → Применить",
-            font=ctk.CTkFont(size=12),
-            text_color=TEXT_MUTED,
-        ).pack(anchor="w", padx=20, pady=(0, 8))
+        action_row = ctk.CTkFrame(footer, fg_color="transparent")
+        action_row.pack(fill="x", pady=(0, 10))
 
-        ctk.CTkLabel(
-            self,
-            text=f"zapret: {version_label()} · запуск как в оригинальном .bat",
-            font=ctk.CTkFont(size=11),
-            text_color=TEXT_MUTED,
-        ).pack(anchor="w", padx=20, pady=(0, 8))
-
-        if not is_admin():
-            ctk.CTkLabel(
-                self,
-                text="⚠ Нужен запуск DpiBypass от администратора",
-                font=ctk.CTkFont(size=12),
-                text_color=WARN,
-            ).pack(anchor="w", padx=20, pady=(0, 8))
-
-        self.test_status = ctk.CTkLabel(
-            self,
-            text="",
-            font=ctk.CTkFont(size=12),
-            text_color=TEXT_MUTED,
-            anchor="w",
-        )
-        self.test_status.pack(fill="x", padx=20, pady=(0, 8))
-
-        list_frame = ctk.CTkScrollableFrame(
-            self, fg_color=SURFACE, corner_radius=12, height=180
-        )
-        list_frame.pack(fill="x", padx=20, pady=(0, 10))
-
-        for idx, item in enumerate(self._ranked, start=1):
-            badge = " ★ рекомендуем" if item.name == (suggested or "") else ""
-            text = f"{idx}. {item.label} — балл {item.score}, {item.ok_count}/5 OK{badge}"
-            ctk.CTkRadioButton(
-                list_frame,
-                text=text,
-                variable=self._choice,
-                value=item.name,
-                font=ctk.CTkFont(size=13),
-                text_color=OK if idx == 1 else TEXT,
-                fg_color=PRIMARY,
-                hover_color="#0284C7",
-                command=self._on_selection_changed,
-            ).pack(anchor="w", padx=12, pady=6)
-
-        ctk.CTkLabel(
-            self,
-            text="Детали выбранного пресета",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color=TEXT_MUTED,
-        ).pack(anchor="w", padx=20, pady=(4, 4))
-
-        self.details = ctk.CTkTextbox(
-            self,
-            height=130,
+        ctk.CTkButton(
+            action_row,
+            text="Отмена",
+            width=120,
             fg_color=SURFACE,
-            text_color=TEXT,
-            font=ctk.CTkFont(family="Consolas", size=11),
-        )
-        self.details.pack(fill="both", expand=True, padx=20, pady=(0, 12))
-        self.details.configure(state="disabled")
+            hover_color=SURFACE_2,
+            command=self._on_cancel,
+        ).pack(side="right", padx=(8, 0))
 
-        test_row = ctk.CTkFrame(self, fg_color="transparent")
-        test_row.pack(fill="x", padx=20, pady=(0, 8))
+        self.btn_confirm = ctk.CTkButton(
+            action_row,
+            text="Применить и запустить Discord",
+            fg_color=PRIMARY,
+            hover_color="#0284C7",
+            command=self._on_confirm,
+        )
+        self.btn_confirm.pack(side="right")
+
+        test_row = ctk.CTkFrame(footer, fg_color="transparent")
+        test_row.pack(fill="x")
 
         self.btn_test = ctk.CTkButton(
             test_row,
@@ -175,29 +128,90 @@ class DiscordConfirmDialog(ctk.CTkToplevel):
         )
         self.btn_try_discord.pack(side="left")
 
-        row = ctk.CTkFrame(self, fg_color="transparent")
-        row.pack(fill="x", padx=20, pady=(0, 16))
+        body = ctk.CTkFrame(self, fg_color=BG)
+        body.pack(side="top", fill="both", expand=True)
 
-        ctk.CTkButton(
-            row,
-            text="Отмена",
-            width=120,
-            fg_color=SURFACE,
-            hover_color=SURFACE_2,
-            command=self._on_cancel,
-        ).pack(side="right", padx=(8, 0))
+        ctk.CTkLabel(
+            body,
+            text="Лучшие пресеты zapret",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=TEXT,
+        ).pack(anchor="w", padx=20, pady=(18, 4))
 
-        self.btn_confirm = ctk.CTkButton(
-            row,
-            text="Применить и запустить Discord",
-            fg_color=PRIMARY,
-            hover_color="#0284C7",
-            command=self._on_confirm,
+        ctk.CTkLabel(
+            body,
+            text="Выберите → Проверить настройку → Применить",
+            font=ctk.CTkFont(size=12),
+            text_color=TEXT_MUTED,
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        ctk.CTkLabel(
+            body,
+            text=f"zapret: {version_label()} · запуск как в оригинальном .bat",
+            font=ctk.CTkFont(size=11),
+            text_color=TEXT_MUTED,
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        if not is_admin():
+            ctk.CTkLabel(
+                body,
+                text="⚠ Нужен запуск DpiBypass от администратора",
+                font=ctk.CTkFont(size=12),
+                text_color=WARN,
+            ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self.test_status = ctk.CTkLabel(
+            body,
+            text="",
+            font=ctk.CTkFont(size=12),
+            text_color=TEXT_MUTED,
+            anchor="w",
         )
-        self.btn_confirm.pack(side="right")
+        self.test_status.pack(fill="x", padx=20, pady=(0, 8))
+
+        list_frame = ctk.CTkFrame(body, fg_color=SURFACE, corner_radius=12)
+        list_frame.pack(fill="x", padx=20, pady=(0, 10))
+
+        for idx, item in enumerate(self._ranked, start=1):
+            badge = " ★ рекомендуем" if item.name == (suggested or "") else ""
+            text = f"{idx}. {item.label} — балл {item.score}, {item.ok_count}/5 OK{badge}"
+            ctk.CTkRadioButton(
+                list_frame,
+                text=text,
+                variable=self._choice,
+                value=item.name,
+                font=ctk.CTkFont(size=13),
+                text_color=OK if idx == 1 else TEXT,
+                fg_color=PRIMARY,
+                hover_color="#0284C7",
+                command=self._on_selection_changed,
+            ).pack(anchor="w", padx=12, pady=6)
+
+        ctk.CTkLabel(
+            body,
+            text="Детали выбранного пресета",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=TEXT_MUTED,
+        ).pack(anchor="w", padx=20, pady=(4, 4))
+
+        self.details = ctk.CTkTextbox(
+            body,
+            height=110,
+            fg_color=SURFACE,
+            text_color=TEXT,
+            font=ctk.CTkFont(family="Consolas", size=11),
+        )
+        self.details.pack(fill="x", padx=20, pady=(0, 12))
+        self.details.configure(state="disabled")
 
         self._update_details()
         self.protocol("WM_DELETE_WINDOW", self._on_cancel)
+        self.bind("<Destroy>", self._on_destroy, add="+")
+
+    def _on_destroy(self, event) -> None:
+        if event.widget is not self:
+            return
+        self._testing = False
 
     def _selected(self) -> PresetScore | None:
         name = self._choice.get()
@@ -263,11 +277,13 @@ class DiscordConfirmDialog(ctk.CTkToplevel):
     def _run_test(self, preset_name: str, label: str) -> None:
         try:
             scored = live_test_preset(self.engine.winws, preset_name, label)
-            self.after(0, lambda: self._on_test_done(scored, None))
+            safe_after(self, 0, lambda: self._on_test_done(scored, None))
         except Exception as exc:
-            self.after(0, lambda: self._on_test_done(None, exc))
+            safe_after(self, 0, lambda: self._on_test_done(None, exc))
 
     def _on_test_done(self, scored: PresetScore | None, error: Exception | None) -> None:
+        if not is_alive(self):
+            return
         self._testing = False
         self.btn_test.configure(text="Проверить настройку")
         self._set_actions_enabled(True)
@@ -306,13 +322,14 @@ class DiscordConfirmDialog(ctk.CTkToplevel):
             return
         try:
             self.engine.winws.start_preset(item.name)
+            time.sleep(2.0)
             subprocess.run(
                 ["taskkill", "/IM", "Discord.exe", "/F"],
                 creationflags=0x08000000,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            launch_desktop(load_config().socks_port)
+            launch_desktop()
             mb.showinfo(
                 "Тестовый запуск",
                 f"Discord открыт с пресетом:\n{item.name}\n\n"
@@ -345,13 +362,14 @@ class DiscordConfirmDialog(ctk.CTkToplevel):
             else:
                 self.engine.winws.start_preset(preset)
 
+            time.sleep(2.0)
             subprocess.run(
                 ["taskkill", "/IM", "Discord.exe", "/F"],
                 creationflags=0x08000000,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            launch_desktop(cfg.socks_port)
+            launch_desktop()
 
             if self.on_applied:
                 self.on_applied()
@@ -361,11 +379,13 @@ class DiscordConfirmDialog(ctk.CTkToplevel):
                 f"Применён пресет:\n{preset}\n\nDiscord запускается…",
                 parent=self,
             )
-            self.grab_release()
-            self.destroy()
+            if is_alive(self):
+                self.grab_release()
+                self.destroy()
         except Exception as exc:
             mb.showerror("Discord", str(exc), parent=self)
 
     def _on_cancel(self) -> None:
-        self.grab_release()
-        self.destroy()
+        if is_alive(self):
+            self.grab_release()
+            self.destroy()

@@ -31,8 +31,12 @@ def _proxy_url(port: int) -> str:
     return f"socks5://127.0.0.1:{port}"
 
 
-def launch_desktop(port: int = 1080) -> None:
-    """Start Discord. With winws active, proxy flags are optional."""
+def launch_desktop(*, port: int = 1080, use_socks_proxy: bool = False) -> None:
+    """Start Discord.
+
+    zapret/winws обходит DPI на уровне пакетов — SOCKS не нужен.
+    Принудительный --proxy-server без ByeDPI ломает запуск (бесконечное Starting…).
+    """
     target = find_discord_exe()
     if target is None:
         raise FileNotFoundError(
@@ -40,32 +44,54 @@ def launch_desktop(port: int = 1080) -> None:
             "Скачайте с https://discord.com/download"
         )
 
-    proxy = _proxy_url(port)
     env = os.environ.copy()
-    env["HTTP_PROXY"] = proxy
-    env["HTTPS_PROXY"] = proxy
-    env["ALL_PROXY"] = proxy
+    extra_args: list[str] = []
+
+    if use_socks_proxy:
+        proxy = _proxy_url(port)
+        env["HTTP_PROXY"] = proxy
+        env["HTTPS_PROXY"] = proxy
+        env["ALL_PROXY"] = proxy
+        extra_args.append(f"--proxy-server={proxy}")
+    else:
+        for key in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "NO_PROXY",
+            "no_proxy",
+        ):
+            env.pop(key, None)
+        # Сброс прокси, если раньше запускали с --proxy-server (Electron запоминает)
+        extra_args.append("--no-proxy-server")
 
     if target.name == "Discord.exe":
         subprocess.Popen(
-            [str(target), f"--proxy-server={proxy}"],
+            [str(target), *extra_args],
             env=env,
             creationflags=CREATE_NO_WINDOW,
         )
         return
 
-    # Update.exe — start Discord.exe with proxy flags directly
     app_dir = target.parent
     discord_apps = sorted(app_dir.glob("app-*/Discord.exe"), reverse=True)
     if discord_apps:
         subprocess.Popen(
-            [str(discord_apps[0]), f"--proxy-server={proxy}"],
+            [str(discord_apps[0]), *extra_args],
+            env=env,
+            creationflags=CREATE_NO_WINDOW,
+        )
+    elif use_socks_proxy:
+        subprocess.Popen(
+            [str(target), "--processStart", f"Discord.exe --proxy-server={_proxy_url(port)}"],
             env=env,
             creationflags=CREATE_NO_WINDOW,
         )
     else:
         subprocess.Popen(
-            [str(target), "--processStart", f"Discord.exe --proxy-server={proxy}"],
+            [str(target), "--processStart", "Discord.exe --no-proxy-server"],
             env=env,
             creationflags=CREATE_NO_WINDOW,
         )

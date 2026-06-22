@@ -10,6 +10,7 @@ import customtkinter as ctk
 from core.engine import BypassEngine
 from core.zapret_benchmark import run_benchmark
 from ui.discord_confirm import DiscordConfirmDialog
+from ui.tk_safe import is_alive, safe_after
 
 BG = "#0F172A"
 SURFACE = "#1E293B"
@@ -85,9 +86,18 @@ class DiscordTuneDialog(ctk.CTkToplevel):
         self.btn_cancel.pack(side="right")
 
         self.protocol("WM_DELETE_WINDOW", self._on_cancel)
-        self.after(200, self._start)
+        self.bind("<Destroy>", self._on_destroy, add="+")
+        safe_after(self, 200, self._start)
+
+    def _on_destroy(self, event) -> None:
+        if event.widget is not self:
+            return
+        self._cancel.set()
+        self._done = True
 
     def _append_log(self, line: str) -> None:
+        if not is_alive(self):
+            return
         self.log.configure(state="normal")
         self.log.insert("end", line + "\n")
         self.log.see("end")
@@ -95,12 +105,14 @@ class DiscordTuneDialog(ctk.CTkToplevel):
 
     def _on_progress(self, done: int, total: int, label: str, message: str) -> None:
         def ui() -> None:
+            if not is_alive(self):
+                return
             if total > 0:
                 self.progress.set(min(1.0, done / total))
             self.status.configure(text=f"[{done}/{total}] {label}")
             self._append_log(message)
 
-        self.after(0, ui)
+        safe_after(self, 0, ui)
 
     def _start(self) -> None:
         thread = threading.Thread(target=self._worker, daemon=True)
@@ -112,33 +124,41 @@ class DiscordTuneDialog(ctk.CTkToplevel):
                 self._on_progress(done, total, label, message)
 
         def done(best: str | None, score: int, all_results: list) -> None:
-            self.after(0, lambda: self._finish(best, score, all_results))
+            safe_after(self, 0, lambda: self._finish(best, score, all_results))
 
         run_benchmark(self.engine.winws, progress, done, self._cancel)
 
     def _finish(self, best: str | None, score: int, all_results: list | None = None) -> None:
-        if self._done:
+        if self._done or not is_alive(self.master):
             return
         self._done = True
+        master = self.master
 
         if self._cancel.is_set():
-            self.btn_cancel.configure(text="Закрыть")
-            self.status.configure(text="Отменено")
+            if is_alive(self):
+                self.btn_cancel.configure(text="Закрыть")
+                self.status.configure(text="Отменено")
             return
 
-        self.progress.set(1)
-        self.status.configure(text="Проверка завершена — выберите пресет…")
-        self.grab_release()
-        self.destroy()
+        if is_alive(self):
+            self.progress.set(1)
+            self.status.configure(text="Проверка завершена — выберите пресет…")
+            self.grab_release()
+            self.destroy()
+
+        if not is_alive(master):
+            return
 
         def on_applied() -> None:
-            if hasattr(self.master, "_sync_boot_switches"):
-                self.master._sync_boot_switches()
-            if hasattr(self.master, "_refresh_status"):
-                self.master._refresh_status()
+            if not is_alive(master):
+                return
+            if hasattr(master, "_sync_boot_switches"):
+                master._sync_boot_switches()
+            if hasattr(master, "_refresh_status"):
+                master._refresh_status()
 
         DiscordConfirmDialog(
-            self.master,
+            master,
             self.engine,
             all_results or [],
             suggested=best,
@@ -148,5 +168,7 @@ class DiscordTuneDialog(ctk.CTkToplevel):
     def _on_cancel(self) -> None:
         if not self._done:
             self._cancel.set()
-        self.grab_release()
-        self.destroy()
+            self._done = True
+        if is_alive(self):
+            self.grab_release()
+            self.destroy()
