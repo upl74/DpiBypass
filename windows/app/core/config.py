@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass, fields
 
 from .paths import CONFIG_FILE, ensure_dirs
 
-CONFIG_VERSION = 4
+CONFIG_VERSION = 5
 
 
 @dataclass
@@ -19,6 +19,7 @@ class AppConfig:
     autostart: bool = False
     auto_enable: bool = False
     zapret_preset: str = "general.bat"
+    discord_autostart: bool = True
 
 
 def load_config() -> AppConfig:

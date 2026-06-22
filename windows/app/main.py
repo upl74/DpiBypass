@@ -22,9 +22,11 @@ from core.presets import PRESET_LABELS
 from core.tgws import TgWsService
 from core.winws import is_available as winws_available
 
+from core.discord_autostart import autostart_discord, should_autostart_discord
+
 from ui.discord_tune import DiscordTuneDialog
 
-APP_VERSION = "1.3.8"
+APP_VERSION = "1.3.9"
 
 # Material 3 palette (synced with Android DpiBypass)
 PRIMARY = "#0EA5E9"
@@ -271,6 +273,17 @@ class MainWindow(ctk.CTk):
             self.sw_auto_enable.select()
         self.sw_auto_enable.pack(anchor="w", padx=18, pady=5)
 
+        self.sw_discord_boot = ctk.CTkSwitch(
+            startup,
+            text="Discord: сохранённый пресет при загрузке Windows",
+            font=ctk.CTkFont(size=14),
+            progress_color=PRIMARY,
+            command=self._on_discord_boot_toggle,
+        )
+        if self.cfg.discord_autostart:
+            self.sw_discord_boot.select()
+        self.sw_discord_boot.pack(anchor="w", padx=18, pady=5)
+
         self.sw_tray = ctk.CTkSwitch(
             startup,
             text="Сворачивать в трей при закрытии окна",
@@ -332,6 +345,7 @@ class MainWindow(ctk.CTk):
             auto_enable=bool(self.sw_auto_enable.get()),
             socks_port=self.cfg.socks_port,
             zapret_preset=self.cfg.zapret_preset,
+            discord_autostart=bool(self.sw_discord_boot.get()),
         )
 
     def _is_component_enabled(self, component: ComponentId) -> bool:
@@ -394,17 +408,54 @@ class MainWindow(ctk.CTk):
             self.sw_autostart.select()
         else:
             self.sw_autostart.deselect()
+        if self.cfg.discord_autostart:
+            self.sw_discord_boot.select()
+        else:
+            self.sw_discord_boot.deselect()
         if self.cfg.autostart != enabled:
             self.cfg.autostart = enabled
             save_config(self.cfg)
 
+    def _sync_boot_switches(self) -> None:
+        self.cfg = load_config()
+        if self.cfg.autostart:
+            self.sw_autostart.select()
+        if self.cfg.auto_enable:
+            self.sw_auto_enable.select()
+        if self.cfg.discord_autostart:
+            self.sw_discord_boot.select()
+        self._refresh_status()
+
+    def _on_discord_boot_toggle(self) -> None:
+        self.cfg = self._read_config()
+        save_config(self.cfg)
+        if not self.cfg.discord_autostart:
+            return
+        try:
+            self.cfg.autostart = True
+            self.sw_autostart.select()
+            autostart.ensure_discord_autostart(True)
+            self.cfg.autostart = True
+            save_config(self.cfg)
+        except OSError as e:
+            self.sw_discord_boot.deselect()
+            self.cfg.discord_autostart = False
+            save_config(self.cfg)
+            mb.showerror("DpiBypass", f"Не удалось настроить автозагрузку Discord:\n{e}")
+        except PermissionError:
+            self._handle_start_error(PermissionError("task_admin"))
+
     def _on_autostart_toggle(self) -> None:
         want = bool(self.sw_autostart.get())
         try:
-            autostart.set_enabled(want)
             self.cfg = self._read_config()
+            elevated = want and self.cfg.enable_discord and self.cfg.discord_autostart
+            autostart.set_enabled(want, elevated=elevated)
             self.cfg.autostart = want
             save_config(self.cfg)
+        except PermissionError:
+            self.sw_autostart.select() if not want else self.sw_autostart.deselect()
+            self._handle_start_error(PermissionError("task_admin"))
         except Exception as e:
             self.sw_autostart.select() if not want else self.sw_autostart.deselect()
             mb.showerror("DpiBypass", f"Не удалось настроить автозапуск:\n{e}")
@@ -415,7 +466,10 @@ class MainWindow(ctk.CTk):
         self.status_dot.configure(text_color=OK if on else ERR)
         self.status_text.configure(text="Активно" if on else "Выключено")
         if self.cfg.enable_discord and not is_admin() and not self.engine.is_running(ComponentId.DISCORD):
-            hint = "Для Discord: запуск от администратора"
+            if self.cfg.discord_autostart and autostart.uses_elevated_task():
+                hint = f"Discord при загрузке: {self.cfg.zapret_preset}"
+            else:
+                hint = "Discord при загрузке: включите автозапуск или запуск от администратора"
         elif on:
             hint = " · ".join(labels) if labels else "Компоненты запущены"
         else:
@@ -473,6 +527,28 @@ class MainWindow(ctk.CTk):
             self._validate_component(ComponentId.SYS_PROXY, cfg)
 
     def _handle_start_error(self, e: Exception) -> None:
+        if isinstance(e, PermissionError) and str(e) == "task_admin":
+            if mb.askyesno(
+                "DpiBypass — автозагрузка Discord",
+                "Для Discord при загрузке Windows нужна задача планировщика "
+                "(один раз подтвердите UAC — дальше без запросов).\n\n"
+                "Создать задачу сейчас?",
+            ):
+                try:
+                    autostart.ensure_discord_autostart(True)
+                    self.cfg = self._read_config()
+                    self.cfg.autostart = True
+                    self.sw_autostart.select()
+                    self.sw_discord_boot.select()
+                    save_config(self.cfg)
+                    mb.showinfo(
+                        "DpiBypass",
+                        "Автозагрузка Discord настроена.\n"
+                        f"Пресет: {self.cfg.zapret_preset}",
+                    )
+                except OSError as err:
+                    mb.showerror("DpiBypass", str(err))
+            return
         if isinstance(e, PermissionError) and str(e) == "discord_admin":
             if mb.askyesno(
                 "DpiBypass — права администратора",
@@ -497,12 +573,18 @@ class MainWindow(ctk.CTk):
     def _try_auto_enable(self) -> None:
         if self.engine.active or self._busy:
             return
-        if not self.cfg.auto_enable:
+        self.cfg = load_config()
+        if not self.cfg.auto_enable and not (
+            self.launched_autostart and should_autostart_discord(self.cfg)
+        ):
             return
         try:
             self._busy = True
             self._refresh_status()
-            self._start_engine()
+            if self.launched_autostart and should_autostart_discord(self.cfg):
+                autostart_discord(self.engine, self.cfg)
+            if self.cfg.auto_enable:
+                self._start_engine()
             if self.launched_autostart and self.cfg.minimize_to_tray:
                 self._hide_to_tray()
         except Exception as e:

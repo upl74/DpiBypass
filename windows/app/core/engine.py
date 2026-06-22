@@ -72,7 +72,8 @@ class BypassEngine:
         if component == ComponentId.DISCORD:
             if self.winws.running:
                 return
-            self.winws.start()
+            preset = cfg.zapret_preset or "general.bat"
+            self.winws.start(preset)
             return
 
         if component == ComponentId.TGWS:

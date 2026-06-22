@@ -11,6 +11,7 @@ import customtkinter as ctk
 
 from core.config import load_config, save_config
 from core.discord import launch_desktop
+from core.discord_autostart import persist_discord_preset
 from core.engine import BypassEngine
 from core.zapret_benchmark import run_benchmark
 
@@ -143,10 +144,8 @@ class DiscordTuneDialog(ctk.CTkToplevel):
         if not best or score <= 0:
             self.status.configure(text="Пресеты не прошли curl-проверку, применён general.bat")
             self.progress.set(1)
-            cfg = load_config()
-            cfg.zapret_preset = "general.bat"
-            save_config(cfg)
-            self._append_log("\n>>> Применён запасной пресет: general.bat")
+            cfg = persist_discord_preset("general.bat")
+            self._append_log("\n>>> Применён запасной пресет: general.bat (сохранён для автозагрузки)")
             subprocess.run(
                 ["taskkill", "/IM", "Discord.exe", "/F"],
                 creationflags=0x08000000,
@@ -155,6 +154,8 @@ class DiscordTuneDialog(ctk.CTkToplevel):
             )
             try:
                 launch_desktop(cfg.socks_port)
+                if hasattr(self.master, "_sync_boot_switches"):
+                    self.master._sync_boot_switches()
                 mb.showwarning(
                     "Discord",
                     "Автотест не нашёл идеальный пресет.\n"
@@ -166,15 +167,16 @@ class DiscordTuneDialog(ctk.CTkToplevel):
                 mb.showerror("Discord", str(exc), parent=self)
             return
 
-        cfg = load_config()
-        cfg.zapret_preset = best
-        save_config(cfg)
+        cfg = persist_discord_preset(best)
         self.progress.set(1)
         self.status.configure(
             text=f"Выбран: {best} (балл {score})",
             text_color=OK,
         )
-        self._append_log(f"\n>>> Лучший пресет: {best} (балл {score})")
+        self._append_log(
+            f"\n>>> Лучший пресет: {best} (балл {score})\n"
+            ">>> Сохранён для автозагрузки Windows"
+        )
 
         subprocess.run(
             ["taskkill", "/IM", "Discord.exe", "/F"],
@@ -185,6 +187,8 @@ class DiscordTuneDialog(ctk.CTkToplevel):
 
         try:
             launch_desktop(cfg.socks_port)
+            if hasattr(self.master, "_sync_boot_switches"):
+                self.master._sync_boot_switches()
             mb.showinfo(
                 "Discord",
                 f"Применён пресет:\n{best}\n\nDiscord запускается…",
