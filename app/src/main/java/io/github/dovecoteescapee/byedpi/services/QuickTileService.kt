@@ -100,7 +100,12 @@ class QuickTileService : TileService() {
 
     private fun updateStatus() {
         val (status) = appStatus
-        setState(if (status == AppStatus.Halted) Tile.STATE_INACTIVE else Tile.STATE_ACTIVE)
+        setState(
+            when (status) {
+                AppStatus.Halted -> Tile.STATE_INACTIVE
+                AppStatus.Connecting, AppStatus.Running -> Tile.STATE_ACTIVE
+            },
+        )
     }
 
     private fun handleClick() {
@@ -121,7 +126,7 @@ class QuickTileService : TileService() {
                 ServiceManager.start(this, mode)
             }
 
-            AppStatus.Running -> ServiceManager.stop(this)
+            AppStatus.Connecting, AppStatus.Running -> ServiceManager.stop(this)
         }
     }
 }

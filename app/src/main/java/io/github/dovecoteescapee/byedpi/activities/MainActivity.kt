@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -28,6 +29,7 @@ import io.github.dovecoteescapee.byedpi.services.ByeDpiProxyService
 import io.github.dovecoteescapee.byedpi.services.ByeDpiVpnService
 import io.github.dovecoteescapee.byedpi.services.ServiceManager
 import io.github.dovecoteescapee.byedpi.services.appStatus
+import io.github.dovecoteescapee.byedpi.services.setStatus
 import io.github.dovecoteescapee.byedpi.utility.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -35,6 +37,7 @@ import java.io.IOException
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private val probeLogLines = ArrayDeque<String>(6)
 
     companion object {
         private val TAG: String = MainActivity::class.java.simpleName
@@ -74,6 +77,7 @@ class MainActivity : AppCompatActivity() {
             if (it.resultCode == RESULT_OK) {
                 ServiceManager.start(this, Mode.VPN)
             } else {
+                setStatus(AppStatus.Halted, Mode.VPN)
                 Toast.makeText(this, R.string.vpn_permission_denied, Toast.LENGTH_SHORT).show()
                 updateStatus()
             }
@@ -125,10 +129,18 @@ class MainActivity : AppCompatActivity() {
             }
 
             when (val action = intent.action) {
+                PROBE_PROGRESS_BROADCAST -> handleProbeProgress(intent)
+
                 STARTED_BROADCAST,
-                STOPPED_BROADCAST -> updateStatus()
+                STOPPED_BROADCAST -> {
+                    if (action == STOPPED_BROADCAST) {
+                        hideProbePanel()
+                    }
+                    updateStatus()
+                }
 
                 FAILED_BROADCAST -> {
+                    hideProbePanel()
                     val detail = intent.getStringExtra(ERROR_DETAIL)
                     Toast.makeText(
                         context,
@@ -167,6 +179,7 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
 
         val intentFilter = IntentFilter().apply {
+            addAction(PROBE_PROGRESS_BROADCAST)
             addAction(STARTED_BROADCAST)
             addAction(STOPPED_BROADCAST)
             addAction(FAILED_BROADCAST)
@@ -184,6 +197,7 @@ class MainActivity : AppCompatActivity() {
             val (status, _) = appStatus
             when (status) {
                 AppStatus.Halted -> start()
+                AppStatus.Connecting -> stop()
                 AppStatus.Running -> stop()
             }
         }
@@ -260,6 +274,8 @@ class MainActivity : AppCompatActivity() {
 
         when (preferences.mode()) {
             Mode.VPN -> {
+                setStatus(AppStatus.Connecting, Mode.VPN)
+                updateStatus()
                 val intentPrepare = VpnService.prepare(this)
                 if (intentPrepare != null) {
                     vpnRegister.launch(intentPrepare)
@@ -268,7 +284,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            Mode.Proxy -> ServiceManager.start(this, Mode.Proxy)
+            Mode.Proxy -> {
+                setStatus(AppStatus.Connecting, Mode.Proxy)
+                updateStatus()
+                ServiceManager.start(this, Mode.Proxy)
+            }
         }
     }
 
@@ -284,7 +304,7 @@ class MainActivity : AppCompatActivity() {
         val preferences = getPreferences()
         val proxyIp = preferences.getStringNotNull("byedpi_proxy_ip", "127.0.0.1")
         val proxyPort = when (status) {
-            AppStatus.Running -> when (mode) {
+            AppStatus.Running, AppStatus.Connecting -> when (mode) {
                 Mode.VPN -> ByeDpiVpnService.sessionSocksPort.toString()
                 Mode.Proxy -> ByeDpiProxyService.sessionSocksPort.toString()
             }
@@ -293,13 +313,18 @@ class MainActivity : AppCompatActivity() {
         binding.proxyAddress.text = getString(R.string.proxy_address, proxyIp, proxyPort)
 
         val isRunning = status == AppStatus.Running
+        val isConnecting = status == AppStatus.Connecting
         binding.statusIndicator.setBackgroundResource(
-            if (isRunning) R.drawable.bg_status_dot_connected
-            else R.drawable.bg_status_dot_disconnected,
+            when {
+                isRunning -> R.drawable.bg_status_dot_connected
+                isConnecting -> R.drawable.bg_status_dot_connecting
+                else -> R.drawable.bg_status_dot_disconnected
+            },
         )
 
         when (status) {
             AppStatus.Halted -> {
+                hideProbePanel()
                 binding.statusButton.backgroundTintList =
                     ColorStateList.valueOf(ContextCompat.getColor(this, R.color.primary))
                 when (preferences.mode()) {
@@ -311,6 +336,23 @@ class MainActivity : AppCompatActivity() {
                     Mode.Proxy -> {
                         binding.statusText.setText(R.string.proxy_down)
                         binding.statusButton.setText(R.string.proxy_start)
+                    }
+                }
+                binding.statusButton.isEnabled = true
+            }
+
+            AppStatus.Connecting -> {
+                binding.statusButton.backgroundTintList =
+                    ColorStateList.valueOf(ContextCompat.getColor(this, R.color.status_connecting))
+                when (mode) {
+                    Mode.VPN -> {
+                        binding.statusText.setText(R.string.vpn_connecting)
+                        binding.statusButton.setText(R.string.vpn_disconnect)
+                    }
+
+                    Mode.Proxy -> {
+                        binding.statusText.setText(R.string.vpn_connecting)
+                        binding.statusButton.setText(R.string.proxy_stop)
                     }
                 }
                 binding.statusButton.isEnabled = true
@@ -333,5 +375,93 @@ class MainActivity : AppCompatActivity() {
                 binding.statusButton.isEnabled = true
             }
         }
+    }
+
+    private fun handleProbeProgress(intent: Intent) {
+        val phase = intent.getStringExtra(PROBE_PHASE) ?: return
+        val index = intent.getIntExtra(PROBE_INDEX, 0)
+        val total = intent.getIntExtra(PROBE_TOTAL, 0)
+        val label = intent.getStringExtra(PROBE_PRESET_LABEL).orEmpty()
+
+        when (phase) {
+            ProbePhase.STARTED -> {
+                probeLogLines.clear()
+                showProbePanel()
+                binding.probeStatusLine.setText(R.string.probe_started)
+                binding.probePresetName.text = ""
+                binding.probeLog.text = ""
+                binding.probeProgress.isIndeterminate = true
+                binding.probeCounter.text = ""
+            }
+
+            ProbePhase.SKIPPED -> {
+                binding.probePanel.visibility = View.VISIBLE
+                binding.probeStatusLine.setText(R.string.probe_skipped)
+                binding.probePresetName.text = ""
+                binding.probeProgress.isIndeterminate = true
+                binding.probeCounter.text = ""
+            }
+
+            ProbePhase.TRYING -> {
+                showProbePanel()
+                binding.probeProgress.isIndeterminate = false
+                binding.probeProgress.max = total.coerceAtLeast(1)
+                binding.probeProgress.setProgressCompat(index.coerceAtMost(total), true)
+                binding.probeCounter.text = getString(R.string.probe_counter, index, total)
+                binding.probePresetName.text = label
+                binding.probeStatusLine.setText(R.string.probe_trying)
+            }
+
+            ProbePhase.FAILED -> {
+                probeLogLines.addLast(getString(R.string.probe_failed_line, label))
+                trimProbeLog()
+                binding.probeLog.text = probeLogLines.joinToString("\n")
+                binding.probeStatusLine.setTextColor(
+                    ContextCompat.getColor(this, R.color.probe_failed),
+                )
+                binding.probeStatusLine.text = getString(R.string.probe_failed_line, label)
+            }
+
+            ProbePhase.SUCCESS -> {
+                probeLogLines.addLast(getString(R.string.probe_success_line, label))
+                trimProbeLog()
+                binding.probeLog.text = probeLogLines.joinToString("\n")
+                binding.probeStatusLine.setTextColor(
+                    ContextCompat.getColor(this, R.color.status_connected),
+                )
+                binding.probeStatusLine.text = getString(R.string.probe_success_line, label)
+            }
+
+            ProbePhase.FINISHED -> {
+                binding.probeProgress.isIndeterminate = false
+                binding.probeProgress.max = total.coerceAtLeast(1)
+                binding.probeProgress.setProgressCompat(total.coerceAtLeast(1), true)
+                if (label.isNotEmpty()) {
+                    binding.probePresetName.text = label
+                    binding.probeStatusLine.setTextColor(
+                        ContextCompat.getColor(this, R.color.status_connected),
+                    )
+                    binding.probeStatusLine.text = getString(R.string.probe_success_final, label)
+                }
+            }
+        }
+    }
+
+    private fun trimProbeLog() {
+        while (probeLogLines.size > 5) {
+            probeLogLines.removeFirst()
+        }
+    }
+
+    private fun showProbePanel() {
+        binding.probePanel.visibility = View.VISIBLE
+        binding.probeStatusLine.setTextColor(
+            ContextCompat.getColor(this, R.color.on_surface_variant),
+        )
+    }
+
+    private fun hideProbePanel() {
+        binding.probePanel.visibility = View.GONE
+        probeLogLines.clear()
     }
 }

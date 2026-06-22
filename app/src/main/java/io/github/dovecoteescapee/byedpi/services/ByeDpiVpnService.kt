@@ -99,6 +99,9 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val prefs = getPreferences()
         sessionSocksPort = prefs.getString("byedpi_proxy_port", null)?.toIntOrNull() ?: 1080
 
+        setStatus(AppStatus.Connecting, Mode.VPN)
+        sendProbeProgress(ProbePhase.STARTED, 0, 0, "")
+
         try {
             mutex.withLock {
                 startProxy()
@@ -223,8 +226,18 @@ class ByeDpiVpnService : LifecycleVpnService() {
 
         val attempts = buildProxyAttempts(shared, tgWs, port, cellular)
         val probe = cellular
+        val total = attempts.size
 
-        for (preferences in attempts) {
+        if (!probe || total == 0) {
+            sendProbeProgress(ProbePhase.SKIPPED, 0, 0, "")
+        }
+
+        for ((index, preferences) in attempts.withIndex()) {
+            val label = PresetLabel.fromPreferences(preferences)
+            if (probe && total > 0) {
+                sendProbeProgress(ProbePhase.TRYING, index + 1, total, label)
+            }
+
             byeDpiProxy.reset()
             logPresetTry(preferences)
 
@@ -261,17 +274,61 @@ class ByeDpiVpnService : LifecycleVpnService() {
                         .apply()
                     Log.i(TAG, "Cellular probe selected preset")
                 }
+                if (probe && total > 0) {
+                    sendProbeProgress(ProbePhase.SUCCESS, index + 1, total, label)
+                }
+                sendProbeProgress(ProbePhase.FINISHED, index + 1, total.coerceAtLeast(1), label)
                 return ProxySelection(fd, loopJob, cmd)
             }
 
-            Log.w(TAG, "Preset failed probe, trying next")
+            if (probe && total > 0) {
+                sendProbeProgress(ProbePhase.FAILED, index + 1, total, label)
+            }
             byeDpiProxy.stopProxy()
             loopJob.join()
             byeDpiProxy.reset()
         }
 
         Log.e(TAG, "All cellular probes failed — falling back to default preset")
-        return openFallbackPreset(port, cellular)
+        val fallback = openFallbackPreset(port, cellular)
+        if (fallback != null) {
+            val label = PresetLabel.fromCmd(DpiDefaults.cellularFallbackPreset(this))
+            sendProbeProgress(ProbePhase.FINISHED, 1, 1, label)
+        }
+        return fallback
+    }
+
+    private fun sendProbeProgress(phase: String, index: Int, total: Int, label: String) {
+        val intent = Intent(PROBE_PROGRESS_BROADCAST).apply {
+            setPackage(packageName)
+            putExtra(PROBE_PHASE, phase)
+            putExtra(PROBE_INDEX, index)
+            putExtra(PROBE_TOTAL, total)
+            putExtra(PROBE_PRESET_LABEL, label)
+        }
+        sendBroadcast(intent)
+
+        if (phase == ProbePhase.TRYING && total > 0) {
+            val text = getString(R.string.probe_notification, index, total, label)
+            val notification = createProbeNotification(
+                this,
+                NOTIFICATION_CHANNEL_ID,
+                R.string.notification_title,
+                text,
+                total,
+                index,
+                ByeDpiVpnService::class.java,
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    FOREGROUND_SERVICE_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(FOREGROUND_SERVICE_ID, notification)
+            }
+        }
     }
 
     private suspend fun openFallbackPreset(port: Int, cellular: Boolean): ProxySelection? {
@@ -508,6 +565,10 @@ class ByeDpiVpnService : LifecycleVpnService() {
             },
             Mode.VPN
         )
+
+        if (newStatus == ServiceStatus.Connected) {
+            startForeground()
+        }
 
         val intent = Intent(
             when (newStatus) {

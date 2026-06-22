@@ -2,6 +2,7 @@ package io.github.dovecoteescapee.byedpi.data
 
 enum class AppStatus {
     Halted,
+    Connecting,
     Running,
 }
 

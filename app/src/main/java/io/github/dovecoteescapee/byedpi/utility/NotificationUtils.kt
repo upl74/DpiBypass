@@ -59,3 +59,40 @@ fun createConnectionNotification(
                 )
             )
         .build()
+
+fun createProbeNotification(
+    context: Context,
+    channelId: String,
+    @StringRes title: Int,
+    progressText: String,
+    progressMax: Int,
+    progressValue: Int,
+    service: Class<*>,
+): Notification =
+    NotificationCompat.Builder(context, channelId)
+        .setSmallIcon(R.drawable.ic_notification)
+        .setSilent(true)
+        .setContentTitle(context.getString(title))
+        .setContentText(progressText)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setProgress(progressMax.coerceAtLeast(1), progressValue, progressMax <= 0)
+        .addAction(
+            0,
+            "Stop",
+            PendingIntent.getService(
+                context,
+                0,
+                Intent(context, service).setAction(STOP_ACTION),
+                PendingIntent.FLAG_IMMUTABLE,
+            ),
+        )
+        .setContentIntent(
+            PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, io.github.dovecoteescapee.byedpi.activities.MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE,
+            ),
+        )
+        .build()

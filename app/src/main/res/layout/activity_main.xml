@@ -132,6 +132,84 @@
                         </LinearLayout>
                     </LinearLayout>
 
+                    <LinearLayout
+                        android:id="@+id/probe_panel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_probe_panel"
+                        android:orientation="vertical"
+                        android:padding="14dp"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/probe_section_title"
+                            android:textAppearance="?attr/textAppearanceLabelLarge"
+                            android:textColor="@color/on_surface"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.progressindicator.LinearProgressIndicator
+                                android:id="@+id/probe_progress"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                app:indicatorColor="@color/primary"
+                                app:trackColor="@color/outline"
+                                app:trackCornerRadius="4dp"
+                                tools:progress="40" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/probe_counter"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
+                                android:fontFamily="monospace"
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="@color/on_surface_variant"
+                                tools:text="3/8" />
+                        </LinearLayout>
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/probe_preset_name"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:textAppearance="?attr/textAppearanceBodyLarge"
+                            android:textColor="@color/on_surface"
+                            android:textStyle="bold"
+                            tools:text="MTS Universal" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/probe_status_line"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="@color/on_surface_variant"
+                            tools:text="Проверка YouTube + Instagram…" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/probe_log"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="monospace"
+                            android:lineSpacingExtra="2dp"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="@color/on_surface_variant"
+                            tools:text="✗ MTS #405 QUIC\n→ Hybrid TG+YT" />
+                    </LinearLayout>
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/status_button"
                         style="@style/Widget.DpiBypass.ConnectButton"
