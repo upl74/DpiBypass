@@ -1,4 +1,4 @@
-"""Discord desktop launcher through local SOCKS proxy."""
+"""Discord launcher helpers."""
 
 from __future__ import annotations
 
@@ -15,47 +15,57 @@ def _localappdata() -> Path:
 
 
 def find_discord_exe() -> Path | None:
-    update = _localappdata() / "Discord" / "Update.exe"
-    if update.is_file():
-        return update
-
     discord_dir = _localappdata() / "Discord"
     if discord_dir.is_dir():
         apps = sorted(discord_dir.glob("app-*/Discord.exe"), reverse=True)
         for exe in apps:
             if exe.is_file():
                 return exe
+    update = _localappdata() / "Discord" / "Update.exe"
+    if update.is_file():
+        return update
     return None
 
 
-def _proxy_env(port: int) -> dict[str, str]:
-    proxy = f"socks5://127.0.0.1:{port}"
-    env = os.environ.copy()
-    env["HTTP_PROXY"] = proxy
-    env["HTTPS_PROXY"] = proxy
-    env["ALL_PROXY"] = proxy
-    env["NO_PROXY"] = "localhost,127.0.0.1"
-    return env
+def _proxy_url(port: int) -> str:
+    return f"socks5://127.0.0.1:{port}"
 
 
 def launch_desktop(port: int = 1080) -> None:
+    """Start Discord. With winws active, proxy flags are optional."""
     target = find_discord_exe()
     if target is None:
         raise FileNotFoundError(
             "Discord не установлен.\n"
-            "Скачайте с https://discord.com/download или откройте в браузере."
+            "Скачайте с https://discord.com/download"
         )
 
-    env = _proxy_env(port)
-    if target.name == "Update.exe":
+    proxy = _proxy_url(port)
+    env = os.environ.copy()
+    env["HTTP_PROXY"] = proxy
+    env["HTTPS_PROXY"] = proxy
+    env["ALL_PROXY"] = proxy
+
+    if target.name == "Discord.exe":
         subprocess.Popen(
-            [str(target), "--processStart", "Discord.exe"],
+            [str(target), f"--proxy-server={proxy}"],
+            env=env,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        return
+
+    # Update.exe — start Discord.exe with proxy flags directly
+    app_dir = target.parent
+    discord_apps = sorted(app_dir.glob("app-*/Discord.exe"), reverse=True)
+    if discord_apps:
+        subprocess.Popen(
+            [str(discord_apps[0]), f"--proxy-server={proxy}"],
             env=env,
             creationflags=CREATE_NO_WINDOW,
         )
     else:
         subprocess.Popen(
-            [str(target)],
+            [str(target), "--processStart", f"Discord.exe --proxy-server={proxy}"],
             env=env,
             creationflags=CREATE_NO_WINDOW,
         )

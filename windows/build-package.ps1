@@ -23,6 +23,14 @@ if (Test-Path (Join-Path $binSrc 'ciadpi.exe')) {
     Write-Host '[WARN] bin\ciadpi.exe missing — run setup.ps1 first' -ForegroundColor Yellow
 }
 
+$zapretSrc = Join-Path $binSrc 'zapret'
+if (Test-Path $zapretSrc) {
+    Copy-Item $zapretSrc (Join-Path $binDst 'zapret') -Recurse -Force
+    Write-Host '[OK] bin\zapret copied (Discord / winws)' -ForegroundColor Green
+} else {
+    Write-Host '[WARN] bin\zapret missing — run setup.ps1 for Discord' -ForegroundColor Yellow
+}
+
 $zip = Join-Path $dist 'DpiBypass-Windows.zip'
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path $exe, $binDst -DestinationPath $zip -Force

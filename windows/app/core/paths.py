@@ -16,6 +16,10 @@ CONFIG_FILE = DATA_DIR / "config.json"
 
 BYEDPI_EXE = BIN_DIR / "ciadpi.exe"
 TGWS_VENDOR = WINDOWS_ROOT / "third_party" / "tg-ws-proxy"
+ZAPRET_ROOT = BIN_DIR / "zapret"
+ZAPRET_BIN_DIR = ZAPRET_ROOT / "bin"
+ZAPRET_LISTS_DIR = ZAPRET_ROOT / "lists"
+WINWS_EXE = ZAPRET_BIN_DIR / "winws.exe"
 
 
 def ensure_dirs() -> None:
