@@ -14,10 +14,10 @@ from .zapret_presets import ZapretPreset, list_presets
 
 CREATE_NO_WINDOW = 0x08000000
 
-SETTLE_S = 1.5
-SETTLE_QUICK_S = 1.0
-STOP_GAP_S = 0.25
-CURL_TIMEOUT_S = 2
+SETTLE_S = 2.5
+SETTLE_QUICK_S = 1.5
+STOP_GAP_S = 0.35
+CURL_TIMEOUT_S = 4
 FULL_TEST_TOP_N = 8
 
 DISCORD_TARGETS: list[tuple[str, str, int]] = [

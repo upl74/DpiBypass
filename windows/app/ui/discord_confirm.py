@@ -10,11 +10,13 @@ import customtkinter as ctk
 import tkinter.messagebox as mb
 
 from core.config import load_config
+from core.admin import is_admin
 from core.discord import launch_desktop
 from core.discord_autostart import persist_discord_preset
 from core.engine import BypassEngine, ComponentId
 from core.zapret_benchmark import PresetScore, live_test_preset, rank_results
 from core.zapret_presets import default_preset_name
+from core.zapret_runtime import version_label
 
 BG = "#0F172A"
 SURFACE = "#1E293B"
@@ -90,6 +92,21 @@ class DiscordConfirmDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12),
             text_color=TEXT_MUTED,
         ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        ctk.CTkLabel(
+            self,
+            text=f"zapret: {version_label()} · запуск как в оригинальном .bat",
+            font=ctk.CTkFont(size=11),
+            text_color=TEXT_MUTED,
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        if not is_admin():
+            ctk.CTkLabel(
+                self,
+                text="⚠ Нужен запуск DpiBypass от администратора",
+                font=ctk.CTkFont(size=12),
+                text_color=WARN,
+            ).pack(anchor="w", padx=20, pady=(0, 8))
 
         self.test_status = ctk.CTkLabel(
             self,

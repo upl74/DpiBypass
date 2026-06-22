@@ -21,12 +21,13 @@ from core.paths import BYEDPI_EXE, WINDOWS_ROOT
 from core.presets import PRESET_LABELS
 from core.tgws import TgWsService
 from core.winws import is_available as winws_available
+from core.zapret_runtime import read_installed_version, version_label
 
 from core.discord_autostart import autostart_discord, should_autostart_discord
 
 from ui.discord_tune import DiscordTuneDialog
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 
 # Material 3 palette (synced with Android DpiBypass)
 PRIMARY = "#0EA5E9"
@@ -143,9 +144,10 @@ class MainWindow(ctk.CTk):
         ).pack(anchor="w")
 
         admin_hint = " · запущено от администратора" if is_admin() else ""
+        zapret_ver = read_installed_version() or "нет"
         self.admin_label = ctk.CTkLabel(
             titles,
-            text=f"Discord: WinDivert{admin_hint}",
+            text=f"zapret {zapret_ver}{admin_hint}",
             font=ctk.CTkFont(size=11),
             text_color=OK if is_admin() else "#F59E0B",
             anchor="w",
@@ -642,13 +644,21 @@ class MainWindow(ctk.CTk):
     def _run_setup(self) -> None:
         setup = WINDOWS_ROOT / "setup.ps1"
         subprocess.Popen(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(setup)],
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(setup),
+                "-ForceZapret",
+            ],
             cwd=str(WINDOWS_ROOT),
         )
         mb.showinfo(
             "DpiBypass",
-            "Запущена установка компонентов.\n"
-            "После завершения снова нажмите «Включить обход».",
+            "Обновление компонентов (zapret 1.9.9c + списки).\n"
+            "После завершения снова нажмите Discord.",
         )
 
     def _hide_to_tray(self) -> None:
