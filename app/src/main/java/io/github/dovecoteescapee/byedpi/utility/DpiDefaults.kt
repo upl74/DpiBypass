@@ -14,7 +14,7 @@ object DpiDefaults {
 
     private const val PREFS_VERSION_KEY = "dpi_defaults_version"
 
-    const val CURRENT_VERSION = 14
+    const val CURRENT_VERSION = 15
 
 
 
@@ -71,10 +71,21 @@ object DpiDefaults {
 
 
 
-    /** YouTube / Instagram — пользовательский пресет (двойная TLS-лестница + auto ssl_err). */
-    const val PRESET_YOUTUBE =
+    /** YouTube / Instagram — TLS ladder + QUIC (важно для LTE/5G) + whitelist Google hosts. */
+    private const val YOUTUBE_TRICKS =
+        "-Ku -a3 -An -Kt,h"
 
-        "$BIND $LADDER_FULL -r1+s -S -a1 -As $LADDER_FULL -S -a1"
+    const val PRESET_YOUTUBE_BASE =
+        "$BIND $YOUTUBE_TRICKS $LADDER_FULL -r1+s -S -a1 -As -Kt,h $LADDER_FULL -S -a1"
+
+    /** @deprecated use [youtubePreset] */
+    const val PRESET_YOUTUBE = PRESET_YOUTUBE_BASE
+
+    fun youtubePreset(context: android.content.Context): String =
+        HostsAssets.withGoogleHosts(PRESET_YOUTUBE_BASE, context)
+
+    fun litePreset(context: android.content.Context): String =
+        HostsAssets.withGoogleHosts(PRESET_GOODBYEDPI_LITE, context)
 
     /** @deprecated use [PRESET_YOUTUBE] */
     const val PRESET_MEDIA_TCP =
@@ -91,7 +102,7 @@ object DpiDefaults {
 
 
 
-    fun presetArgs(preset: String): String? = when (preset) {
+    fun presetArgs(context: Context, preset: String): String? = when (preset) {
 
         "hybrid", "goodbyedpi" -> PRESET_HYBRID
 
@@ -99,9 +110,7 @@ object DpiDefaults {
 
         "universal" -> PRESET_UNIVERSAL
 
-        "youtube" -> PRESET_YOUTUBE
-
-        "youtube_video" -> PRESET_YOUTUBE
+        "youtube", "youtube_video" -> youtubePreset(context)
 
         "media_tcp" -> PRESET_MEDIA_TCP
 
@@ -147,41 +156,58 @@ object DpiDefaults {
 
 
     fun applyIfNeeded(context: Context) {
-
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        val version = prefs.getInt(PREFS_VERSION_KEY, 0)
+        if (version >= CURRENT_VERSION) return
 
-        if (prefs.getInt(PREFS_VERSION_KEY, 0) >= CURRENT_VERSION) return
+        val editor = prefs.edit().putInt(PREFS_VERSION_KEY, CURRENT_VERSION)
+        when {
+            version == 0 -> applyFreshInstall(editor, context)
+            version < 15 -> applyMobileYoutubeFix(editor, context, prefs)
+        }
+        editor.apply()
+    }
 
-
-
-        prefs.edit()
-
-            .putInt(PREFS_VERSION_KEY, CURRENT_VERSION)
-
+    private fun applyFreshInstall(
+        editor: android.content.SharedPreferences.Editor,
+        context: Context,
+    ) {
+        editor
             .putString("byedpi_mode", "vpn")
-
             .putBoolean("only_target_apps", true)
-
             .putBoolean("byedpi_enable_cmd_settings", true)
-
             .putBoolean("ipv6_enable", false)
-
             .putBoolean("tg_ws_telegram", true)
             .putBoolean("tg_ws_auto_apply", true)
-
             .putString("byedpi_cmd_preset", "youtube")
-
-            .putString("byedpi_cmd_args", PRESET_YOUTUBE)
-
+            .putString("byedpi_cmd_args", youtubePreset(context))
             .putString("byedpi_proxy_ip", "127.0.0.1")
-
             .putString("byedpi_proxy_port", "1080")
-
             .putString("dns_ip", "")
-
-            .apply()
-
     }
+
+    /** v15: QUIC + Google hosts — важно для YouTube на мобильной сети. */
+    private fun applyMobileYoutubeFix(
+        editor: android.content.SharedPreferences.Editor,
+        context: Context,
+        prefs: android.content.SharedPreferences,
+    ) {
+        val preset = prefs.getString("byedpi_cmd_preset", "youtube") ?: "youtube"
+        if (preset in YOUTUBE_PRESETS) {
+            editor.putString("byedpi_cmd_args", youtubePreset(context))
+        }
+        editor.putBoolean("ipv6_enable", false)
+    }
+
+    private val YOUTUBE_PRESETS = setOf(
+        "youtube",
+        "youtube_video",
+        "universal",
+        "hybrid",
+        "goodbyedpi",
+        "media_tcp",
+        "youtube_classic",
+    )
 
 }
 

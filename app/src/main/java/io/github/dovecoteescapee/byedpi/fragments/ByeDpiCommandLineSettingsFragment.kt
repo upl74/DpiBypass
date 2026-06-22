@@ -16,13 +16,13 @@ class ByeDpiCommandLineSettingsFragment : PreferenceFragmentCompat() {
         val cmdArgs = findPreferenceNotNull<EditTextPreference>("byedpi_cmd_args")
 
         if (cmdArgs.text.isNullOrBlank()) {
-            cmdArgs.text = DpiDefaults.PRESET_YOUTUBE
+            cmdArgs.text = DpiDefaults.youtubePreset(requireContext())
         }
 
         preset.setOnPreferenceChangeListener { _, newValue ->
             val key = newValue as String
             if (key != "custom") {
-                DpiDefaults.presetArgs(key)?.let { cmdArgs.text = it }
+                DpiDefaults.presetArgs(requireContext(), key)?.let { cmdArgs.text = it }
             }
             true
         }

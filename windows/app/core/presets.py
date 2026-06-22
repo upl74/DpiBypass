@@ -22,7 +22,10 @@ PRESETS = {
         f"{BIND} {DISCORD_UDP} -An -Kt,h {LADDER_FULL} -r1+s -S -a1 "
         f"-As -Kt,h {LADDER_FULL} -S -a1"
     ),
-    "youtube": f"{BIND} {LADDER_FULL} -r1+s -S -a1 -As {LADDER_FULL} -S -a1",
+    "youtube": (
+        f"{BIND} -Ku -a3 -An -Kt,h {LADDER_FULL} -r1+s -S -a1 "
+        f"-As -Kt,h {LADDER_FULL} -S -a1"
+    ),
     "discord": f"{BIND} {DISCORD_UDP} -H:{DISCORD_HOSTS_INLINE}",
     "hybrid": (
         f"{BIND} -Kt,h {LADDER_FULL} -r1+s -S -a1 -As -Kt,h {LADDER_FULL} -S -a1 "

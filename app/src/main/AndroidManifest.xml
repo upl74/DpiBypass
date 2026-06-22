@@ -31,6 +31,7 @@
         <package android:name="com.exteragram.messenger" />
         <package android:name="com.google.android.apps.youtube.vanced" />
         <package android:name="com.google.android.apps.youtube.music" />
+        <package android:name="com.google.android.apps.youtube.kids" />
         <package android:name="com.android.chrome" />
         <package android:name="com.google.android.webview" />
         <package android:name="com.instagram.android" />

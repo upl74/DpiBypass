@@ -217,20 +217,35 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val shared = getPreferences()
         val tgWs = shared.getBoolean("tg_ws_telegram", true)
         val port = sessionSocksPort
+        val cellular = NetworkHelper.isCellular(this)
+        val ytPreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubePreset(this), port)
+        val litePreset = LocalSocksPort.patchCmdPort(DpiDefaults.litePreset(this), port)
+
         val attempts = buildList {
             if (shared.getBoolean("byedpi_enable_cmd_settings", false)) {
                 val cmd = shared.getString("byedpi_cmd_args", null)?.trim().orEmpty()
                 if (cmd.isNotEmpty()) {
-                    add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(cmd, port)))
+                    val patched = HostsAssets.withGoogleHosts(cmd, this@ByeDpiVpnService)
+                    add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(patched, port)))
                 }
             }
+            if (cellular) {
+                add(ByeDpiProxyCmdPreferences(litePreset))
+            }
             if (tgWs) {
-                add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_YOUTUBE, port)))
-                add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MEDIA_TCP, port)))
+                add(ByeDpiProxyCmdPreferences(ytPreset))
+                add(
+                    ByeDpiProxyCmdPreferences(
+                        LocalSocksPort.patchCmdPort(
+                            HostsAssets.withGoogleHosts(DpiDefaults.PRESET_MEDIA_TCP, this@ByeDpiVpnService),
+                            port,
+                        ),
+                    ),
+                )
             } else {
                 add(ByeDpiProxyPreferences.fromSharedPreferences(shared, port))
             }
-            add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_GOODBYEDPI_LITE, port)))
+            add(ByeDpiProxyCmdPreferences(litePreset))
             add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_HYBRID, port)))
             add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MINIMAL, port)))
             add(DpiDefaults.uiPreferences(port))
@@ -327,7 +342,7 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val sharedPreferences = getPreferences()
         val port = sessionSocksPort
         val userDns = sharedPreferences.getString("dns_ip", null)
-        val ipv6 = sharedPreferences.getBoolean("ipv6_enable", true)
+        val ipv6 = sharedPreferences.getBoolean("ipv6_enable", false)
 
         val tun2socksConfig = """
         | misc:
