@@ -16,14 +16,15 @@ from PIL import Image, ImageDraw
 from core import autostart
 from core.admin import is_admin, relaunch_as_admin
 from core.config import AppConfig, load_config, save_config
-from core.discord import launch_desktop as launch_discord
 from core.engine import BypassEngine
 from core.paths import BYEDPI_EXE, WINDOWS_ROOT
 from core.presets import PRESET_LABELS
 from core.tgws import TgWsService
 from core.winws import is_available as winws_available
 
-APP_VERSION = "1.3.5"
+from ui.discord_tune import DiscordTuneDialog
+
+APP_VERSION = "1.3.6"
 
 # Material 3 palette (synced with Android DpiBypass)
 PRIMARY = "#0EA5E9"
@@ -309,7 +310,7 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkLabel(
             scroll,
-            text=f"v{APP_VERSION} · Windows · TG: WS · YT/Discord: ByeDPI + SOCKS",
+            text=f"v{APP_VERSION} · Windows · Discord: автоподбор zapret",
             font=ctk.CTkFont(size=11),
             text_color=TEXT_MUTED,
         ).pack(anchor="w", padx=22, pady=(8, 20))
@@ -327,6 +328,7 @@ class MainWindow(ctk.CTk):
             autostart=bool(self.sw_autostart.get()),
             auto_enable=bool(self.sw_auto_enable.get()),
             socks_port=self.cfg.socks_port,
+            zapret_preset=self.cfg.zapret_preset,
         )
 
     def _on_discord_toggle(self) -> None:
@@ -368,11 +370,10 @@ class MainWindow(ctk.CTk):
         if self.cfg.enable_discord and not is_admin() and not on:
             hint = "Для Discord: запуск от администратора"
         elif on:
-            hint = (
-                "ByeDPI + zapret winws (Discord) активны"
-                if self.cfg.enable_discord
-                else "ByeDPI и прокси работают в фоне"
-            )
+            if self.cfg.enable_discord:
+                hint = f"ByeDPI + zapret ({self.cfg.zapret_preset})"
+            else:
+                hint = "ByeDPI и прокси работают в фоне"
         else:
             hint = "Нажмите кнопку ниже для запуска"
         self.status_hint.configure(text=hint)
@@ -458,16 +459,27 @@ class MainWindow(ctk.CTk):
 
     def _open_discord(self) -> None:
         try:
-            if not self.engine.winws.running:
-                if not self.engine.active:
-                    mb.showwarning(
-                        "DpiBypass",
-                        "Сначала включите обход (нужен winws + права администратора).",
-                    )
-                    return
-            launch_discord(self.cfg.socks_port)
+            self.cfg = self._read_config()
+            if not self.cfg.enable_discord:
+                self.sw_discord.select()
+                self.cfg.enable_discord = True
+            save_config(self.cfg)
+
+            if not winws_available():
+                raise FileNotFoundError(
+                    "Нет winws.exe (zapret) — нажмите «Компоненты» для загрузки."
+                )
+            if not is_admin():
+                raise PermissionError("discord_admin")
+
+            if not self.engine.active:
+                self._validate_components(self.cfg)
+                self.engine.start(self.cfg)
+                self._refresh_status()
+
+            DiscordTuneDialog(self, self.engine)
         except Exception as e:
-            mb.showerror("DpiBypass", str(e))
+            self._handle_start_error(e)
 
     def _open_tg(self) -> None:
         try:

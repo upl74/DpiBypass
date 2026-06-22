@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass, fields
 
 from .paths import CONFIG_FILE, ensure_dirs
 
-CONFIG_VERSION = 3
+CONFIG_VERSION = 4
 
 
 @dataclass
@@ -18,6 +18,7 @@ class AppConfig:
     minimize_to_tray: bool = True
     autostart: bool = False
     auto_enable: bool = False
+    zapret_preset: str = "general.bat"
 
 
 def effective_preset(cfg: AppConfig) -> str:
