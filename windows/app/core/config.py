@@ -1,17 +1,22 @@
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 
 from .paths import CONFIG_FILE, DATA_DIR, ensure_dirs
+
+CONFIG_VERSION = 2
 
 
 @dataclass
 class AppConfig:
+    config_version: int = CONFIG_VERSION
     preset: str = "youtube"
     enable_byedpi: bool = True
     enable_tgws: bool = True
     enable_sys_proxy: bool = True
     socks_port: int = 1080
     minimize_to_tray: bool = True
+    autostart: bool = False
+    auto_enable: bool = False
 
 
 def load_config() -> AppConfig:
@@ -20,11 +25,16 @@ def load_config() -> AppConfig:
         return AppConfig()
     try:
         data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        return AppConfig(**{k: data[k] for k in AppConfig().__dataclass_fields__ if k in data})
+        valid = {f.name for f in fields(AppConfig)}
+        return AppConfig(**{k: data[k] for k in valid if k in data})
     except (json.JSONDecodeError, TypeError, KeyError):
         return AppConfig()
 
 
 def save_config(cfg: AppConfig) -> None:
     ensure_dirs()
-    CONFIG_FILE.write_text(json.dumps(asdict(cfg), indent=2, ensure_ascii=False), encoding="utf-8")
+    cfg.config_version = CONFIG_VERSION
+    CONFIG_FILE.write_text(
+        json.dumps(asdict(cfg), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )

@@ -1,57 +1,58 @@
-# DpiBypass для Windows
+# DpiBypass для Windows (v1.3.3+)
 
-Нормальное десктоп-приложение: тёмная тема, иконка в трее, без консоли.
+Десктоп-приложение с интерфейсом как на Android: тёмная тема Material 3, трей, автозапуск.
 
 ## Быстрый старт
 
 ```powershell
-cd C:\CompanyCall\User\DpiBypassApp\windows
+cd C:\Projects\DpiBypass\windows
 .\setup.ps1
+.\DpiBypass.bat
 ```
 
-Двойной клик по **`DpiBypass.bat`** — откроется окно приложения.
+Или готовый пакет: `dist\DpiBypass-Windows.zip` после `.\build-package.ps1`.
 
 ## Возможности
 
-- Современный интерфейс (CustomTkinter, тёмная тема)
-- Сворачивание в **системный трей** — обход работает в фоне
-- Переключатель вкл/выкл, выбор пресета ByeDPI
-- Telegram WS + YouTube/Instagram через ByeDPI
-- Настройки в `%APPDATA%\DpiBypass\config.json`
+- Современный интерфейс (CustomTkinter, палитра как в Android v1.3.3)
+- **Автозапуск с Windows** — переключатель в настройках
+- **Автовключение обхода** — при старте приложения
+- Сворачивание в **системный трей**
+- ByeDPI (YouTube/Instagram в браузере) + Telegram WS-прокси
+- Настройки: `%APPDATA%\DpiBypass\config.json`
 
 ## Использование
 
-1. **Компоненты** — скачать `ciadpi.exe` и `TgWsProxy_windows.exe` (один раз).
-2. **Включить обход**.
-3. **Telegram** — в трее TgWsProxy → подтвердить прокси.
-4. **YouTube / Instagram** — в браузере (Edge/Chrome) с системным SOCKS.
+1. **Компоненты** — один раз скачать `ciadpi.exe` (кнопка в приложении).
+2. Включите **автозапуск** / **автовключение** при необходимости.
+3. **Включить обход**.
+4. **Telegram** — кнопка «Telegram» для ссылки на локальный прокси.
+5. **YouTube** — откройте в Edge/Chrome (системный SOCKS).
 
-## Сборка одного EXE (опционально)
+## Сборка EXE
 
 ```powershell
-.\build-exe.ps1
+.\setup.ps1          # venv + ciadpi.exe
+.\build-package.ps1  # dist\DpiBypass.exe + dist\DpiBypass-Windows.zip
 ```
 
-Получите `dist\DpiBypass.exe`. Рядом положите папку `bin\` с `ciadpi.exe` и `TgWsProxy_windows.exe`.
+Рядом с `DpiBypass.exe` нужна папка `bin\ciadpi.exe` (копируется в zip автоматически).
 
 ## Структура
 
 ```
 windows/
-  DpiBypass.bat       — запуск (venv + GUI)
-  setup.ps1           — зависимости Python + бинарники
-  build-exe.ps1       — PyInstaller → DpiBypass.exe
-  app/main.py         — интерфейс
-  app/core/           — движок (как на Android)
-  bin/                — ciadpi.exe, TgWsProxy
-  lib/                — legacy PowerShell (не нужен для GUI)
+  DpiBypass.bat
+  setup.ps1
+  build-exe.ps1
+  build-package.ps1
+  app/main.py
+  app/core/
+  bin/ciadpi.exe
+  dist/DpiBypass.exe
 ```
 
 ## Требования
 
 - Windows 10/11
-- Python 3.10+ (устанавливается автоматически в venv при первом запуске)
-
-## Отличия от Android
-
-Per-app VPN на Windows нет — браузер идёт через системный SOCKS. Мобильного YouTube на ПК нет.
+- Python 3.10+ (для разработки; EXE работает без Python)
