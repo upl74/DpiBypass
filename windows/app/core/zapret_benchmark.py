@@ -169,6 +169,24 @@ def _full_score(winws: WinWsService, preset: ZapretPreset) -> PresetScore:
     )
 
 
+def live_test_preset(winws: WinWsService, preset_name: str, label: str = "") -> PresetScore:
+    """Включить пресет и выполнить живую проверку (без сохранения в конфиг)."""
+    winws.stop()
+    time.sleep(STOP_GAP_S)
+    winws.start_preset(preset_name)
+    time.sleep(SETTLE_S)
+
+    total, ok_count, details = _probe_targets_parallel(DISCORD_TARGETS)
+    return PresetScore(
+        name=preset_name,
+        label=label or preset_name,
+        score=total,
+        ok_count=ok_count,
+        details=details,
+        quick_only=False,
+    )
+
+
 def _pick_best(results: list[PresetScore]) -> PresetScore | None:
     ranked = rank_results(results)
     if not ranked or ranked[0].score <= 0:

@@ -26,7 +26,7 @@ from core.discord_autostart import autostart_discord, should_autostart_discord
 
 from ui.discord_tune import DiscordTuneDialog
 
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 
 # Material 3 palette (synced with Android DpiBypass)
 PRIMARY = "#0EA5E9"
