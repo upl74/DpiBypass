@@ -14,8 +14,8 @@ android {
         applicationId = "com.companycall.dpibypass"
         minSdk = 24
         targetSdk = 34
-        versionCode = 13
-        versionName = "1.3.10"
+        versionCode = 14
+        versionName = "1.3.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

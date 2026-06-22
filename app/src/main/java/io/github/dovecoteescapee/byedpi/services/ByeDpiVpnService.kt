@@ -21,11 +21,13 @@ import io.github.dovecoteescapee.byedpi.data.*
 import io.github.dovecoteescapee.byedpi.utility.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 class ByeDpiVpnService : LifecycleVpnService() {
@@ -41,6 +43,8 @@ class ByeDpiVpnService : LifecycleVpnService() {
         private val TAG: String = ByeDpiVpnService::class.java.simpleName
         private const val FOREGROUND_SERVICE_ID: Int = 1
         private const val NOTIFICATION_CHANNEL_ID: String = "ByeDPIVpn"
+        /** Max presets to try on LTE before fallback (avoids multi-minute hangs). */
+        private const val MAX_CELLULAR_PROBE_ATTEMPTS = 5
 
         private var status: ServiceStatus = ServiceStatus.Disconnected
         var lastError: String? = null
@@ -227,15 +231,20 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val attempts = buildProxyAttempts(shared, tgWs, port, cellular)
         val probe = cellular
         val total = attempts.size
+        val probeTotal = if (probe) minOf(total, MAX_CELLULAR_PROBE_ATTEMPTS) else total
 
         if (!probe || total == 0) {
             sendProbeProgress(ProbePhase.SKIPPED, 0, 0, "")
         }
 
         for ((index, preferences) in attempts.withIndex()) {
+            if (probe && index >= MAX_CELLULAR_PROBE_ATTEMPTS) {
+                Log.w(TAG, "Cellular probe limit ($MAX_CELLULAR_PROBE_ATTEMPTS) — using fallback")
+                break
+            }
             val label = PresetLabel.fromPreferences(preferences)
-            if (probe && total > 0) {
-                sendProbeProgress(ProbePhase.TRYING, index + 1, total, label)
+            if (probe && probeTotal > 0) {
+                sendProbeProgress(ProbePhase.TRYING, index + 1, probeTotal, label)
             }
 
             byeDpiProxy.reset()
@@ -256,11 +265,14 @@ class ByeDpiVpnService : LifecycleVpnService() {
                     }
                 }
             }
-            delay(600)
+            delay(400)
 
             val ok = if (probe) {
-                withContext(Dispatchers.IO) {
+                try {
                     PresetProbe.testBypass(port)
+                } catch (_: TimeoutCancellationException) {
+                    Log.w(TAG, "Preset probe timed out: $label")
+                    false
                 }
             } else {
                 true
@@ -274,18 +286,18 @@ class ByeDpiVpnService : LifecycleVpnService() {
                         .apply()
                     Log.i(TAG, "Cellular probe selected preset")
                 }
-                if (probe && total > 0) {
-                    sendProbeProgress(ProbePhase.SUCCESS, index + 1, total, label)
+                if (probe && probeTotal > 0) {
+                    sendProbeProgress(ProbePhase.SUCCESS, index + 1, probeTotal, label)
                 }
-                sendProbeProgress(ProbePhase.FINISHED, index + 1, total.coerceAtLeast(1), label)
+                sendProbeProgress(ProbePhase.FINISHED, index + 1, probeTotal.coerceAtLeast(1), label)
                 return ProxySelection(fd, loopJob, cmd)
             }
 
-            if (probe && total > 0) {
-                sendProbeProgress(ProbePhase.FAILED, index + 1, total, label)
+            if (probe && probeTotal > 0) {
+                sendProbeProgress(ProbePhase.FAILED, index + 1, probeTotal, label)
             }
             byeDpiProxy.stopProxy()
-            loopJob.join()
+            withTimeoutOrNull(2_500) { loopJob.join() }
             byeDpiProxy.reset()
         }
 

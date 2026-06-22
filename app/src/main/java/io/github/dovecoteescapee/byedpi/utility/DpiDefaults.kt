@@ -135,13 +135,19 @@ object DpiDefaults {
     /** Порядок кандидатов для runtime-probe на сотовой сети (без -H: whitelist рвёт YT). */
     fun cellularProbePresets(context: Context, savedCmd: String?): List<String> {
         val candidates = mutableListOf<String>()
+        if (NetworkHelper.isMts(context)) {
+            candidates += PRESET_MTS_UNIVERSAL
+            candidates += PRESET_MTS_405_QUIC
+            candidates += PRESET_MTS_405
+            candidates += PRESET_MTS_FAKE
+            candidates += PRESET_MTS_ALT
+        }
         candidates += PRESET_HYBRID
         candidates += PRESET_YOUTUBE_MOBILE
-        candidates += PRESET_MTS_UNIVERSAL
-        candidates += PRESET_MTS_405_QUIC
-        candidates += PRESET_MTS_405
-        candidates += PRESET_MTS_FAKE
-        candidates += PRESET_MTS_ALT
+        if (!NetworkHelper.isMts(context)) {
+            candidates += PRESET_MTS_UNIVERSAL
+            candidates += PRESET_MTS_405_QUIC
+        }
         savedCmd?.trim()?.takeIf { it.isNotEmpty() }?.let { candidates += it }
         candidates += PRESET_YOUTUBE_BASE
         candidates += PRESET_GOODBYEDPI_LITE
