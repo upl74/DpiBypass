@@ -34,6 +34,7 @@ object AppTargets {
         "com.google.android.googlequicksearchbox",
         "com.google.android.configupdater",
         // Meta / Instagram
+        "com.facebook.katana",
         "com.facebook.services",
         "com.facebook.system",
         "com.facebook.appmanager",

@@ -14,7 +14,7 @@ object DpiDefaults {
 
     private const val PREFS_VERSION_KEY = "dpi_defaults_version"
 
-    const val CURRENT_VERSION = 19
+    const val CURRENT_VERSION = 20
 
 
 
@@ -127,20 +127,32 @@ object DpiDefaults {
         else -> PRESET_YOUTUBE_BASE
     }
 
+    /** МТС OOB + общая TLS-лестница — YouTube и Instagram без -H whitelist. */
+    const val PRESET_MTS_UNIVERSAL =
+        "$BIND -Ku -a3 -Kt,h -o1 -s1+s -s3+s -s6+s -s9+s -s12+s -a1 -At,r,s -d1 -f-1 -r2+s -An " +
+        "-Kt,h $LADDER_FULL -r1+s -a1 -As -Kt,h $LADDER_FULL -r1+s -a1"
+
     /** Порядок кандидатов для runtime-probe на сотовой сети (без -H: whitelist рвёт YT). */
     fun cellularProbePresets(context: Context, savedCmd: String?): List<String> {
         val candidates = mutableListOf<String>()
+        candidates += PRESET_HYBRID
+        candidates += PRESET_YOUTUBE_MOBILE
+        candidates += PRESET_MTS_UNIVERSAL
         candidates += PRESET_MTS_405_QUIC
         candidates += PRESET_MTS_405
         candidates += PRESET_MTS_FAKE
         candidates += PRESET_MTS_ALT
-        candidates += PRESET_YOUTUBE_MOBILE
         savedCmd?.trim()?.takeIf { it.isNotEmpty() }?.let { candidates += it }
         candidates += PRESET_YOUTUBE_BASE
         candidates += PRESET_GOODBYEDPI_LITE
-        candidates += PRESET_HYBRID
         candidates += PRESET_MINIMAL
         return candidates.distinct()
+    }
+
+    fun cellularFallbackPreset(context: Context): String = when {
+        NetworkHelper.isMts(context) -> PRESET_MTS_UNIVERSAL
+        NetworkHelper.isCellular(context) -> PRESET_HYBRID
+        else -> PRESET_YOUTUBE_BASE
     }
 
     /** @deprecated use [PRESET_YOUTUBE] */
@@ -222,6 +234,7 @@ object DpiDefaults {
         when {
             version == 0 -> applyFreshInstall(editor, context)
             version < 19 -> applyMtsTunnelFix(editor, context, prefs)
+            version < 20 -> applyDualServiceProbeFix(editor, context, prefs)
         }
         editor.apply()
     }
@@ -242,6 +255,19 @@ object DpiDefaults {
             .putString("byedpi_proxy_ip", "127.0.0.1")
             .putString("byedpi_proxy_port", "1080")
             .putString("dns_ip", "")
+    }
+
+    /** v20: probe YouTube+Instagram; сброс YT-only кэша пресета. */
+    private fun applyDualServiceProbeFix(
+        editor: android.content.SharedPreferences.Editor,
+        context: Context,
+        prefs: android.content.SharedPreferences,
+    ) {
+        editor.remove("byedpi_cellular_working_cmd")
+        val preset = prefs.getString("byedpi_cmd_preset", "youtube") ?: "youtube"
+        if (preset in YOUTUBE_PRESETS) {
+            editor.putString("byedpi_cmd_args", cellularFallbackPreset(context))
+        }
     }
 
     /** v19: полный туннель на LTE, публичный DNS, сброс кэша пресета. */

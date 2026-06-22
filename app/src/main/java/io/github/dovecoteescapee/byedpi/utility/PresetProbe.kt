@@ -7,30 +7,40 @@ import java.net.Proxy
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
-/** HTTPS check through local ByeDPI SOCKS — socket open ≠ bypass works. */
+/** HTTPS check through local ByeDPI SOCKS — must work for YouTube and Instagram. */
 object PresetProbe {
     private val TAG = PresetProbe::class.java.simpleName
 
-    private val TEST_URLS = arrayOf(
+    private val YOUTUBE_URLS = arrayOf(
         "https://www.youtube.com/generate_204",
         "https://youtubei.googleapis.com/",
         "https://www.gstatic.com/generate_204",
-        "https://i.ytimg.com/generate_204",
     )
 
-    /** At least two endpoints must respond — one success is not enough on strict DPI. */
-    fun testBypass(socksPort: Int, timeoutMs: Int = 12_000): Boolean {
+    private val INSTAGRAM_URLS = arrayOf(
+        "https://www.instagram.com/",
+        "https://i.instagram.com/",
+        "https://graph.instagram.com/",
+    )
+
+    /** Preset must bypass DPI for both YouTube (2+ URLs) and Instagram (1+ URL). */
+    fun testBypass(socksPort: Int, timeoutMs: Int = 10_000): Boolean {
         val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort))
+        val ytOk = countOk(proxy, YOUTUBE_URLS, timeoutMs) >= 2
+        val igOk = countOk(proxy, INSTAGRAM_URLS, timeoutMs) >= 1
+        Log.i(TAG, "Probe youtube=$ytOk instagram=$igOk (port=$socksPort)")
+        return ytOk && igOk
+    }
+
+    private fun countOk(proxy: Proxy, urls: Array<String>, timeoutMs: Int): Int {
         var ok = 0
-        for (url in TEST_URLS) {
+        for (url in urls) {
             if (testUrl(proxy, url, timeoutMs)) {
                 ok++
-                Log.i(TAG, "Probe OK ($ok): $url")
-                if (ok >= 2) return true
+                Log.i(TAG, "Probe OK: $url")
             }
         }
-        Log.w(TAG, "Probe failed: $ok/${TEST_URLS.size} URLs (port=$socksPort)")
-        return false
+        return ok
     }
 
     private fun testUrl(proxy: Proxy, urlString: String, timeoutMs: Int): Boolean {

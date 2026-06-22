@@ -276,7 +276,7 @@ class ByeDpiVpnService : LifecycleVpnService() {
 
     private suspend fun openFallbackPreset(port: Int, cellular: Boolean): ProxySelection? {
         val cmd = if (cellular) {
-            DpiDefaults.defaultYoutubePreset(this)
+            DpiDefaults.cellularFallbackPreset(this)
         } else {
             DpiDefaults.youtubePreset(this)
         }
