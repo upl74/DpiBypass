@@ -221,7 +221,7 @@ class ByeDpiVpnService : LifecycleVpnService() {
             )
         }
 
-        val attempts = buildProxyAttempts(shared, tgWs, port, cellular, isMts)
+        val attempts = buildProxyAttempts(shared, tgWs, port, cellular)
         val probe = cellular
 
         for (preferences in attempts) {
@@ -243,7 +243,7 @@ class ByeDpiVpnService : LifecycleVpnService() {
                     }
                 }
             }
-            delay(350)
+            delay(600)
 
             val ok = if (probe) {
                 withContext(Dispatchers.IO) {
@@ -304,7 +304,6 @@ class ByeDpiVpnService : LifecycleVpnService() {
         tgWs: Boolean,
         port: Int,
         cellular: Boolean,
-        isMts: Boolean,
     ): List<ByeDpiProxyPreferences> {
         val ytPreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubePreset(this), port)
         val ytMobilePreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubeMobilePreset(this), port)
@@ -313,9 +312,14 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val lastWorking = shared.getString("byedpi_cellular_working_cmd", null)?.trim().orEmpty()
 
         val cmdCandidates = if (cellular) {
+            val presets = DpiDefaults.cellularProbePresets(this@ByeDpiVpnService, savedCmd)
             buildList {
-                if (lastWorking.isNotEmpty()) add(lastWorking)
-                addAll(DpiDefaults.cellularProbePresets(this@ByeDpiVpnService, savedCmd))
+                if (lastWorking.isNotEmpty() && lastWorking in presets) {
+                    add(lastWorking)
+                    addAll(presets.filter { it != lastWorking })
+                } else {
+                    addAll(presets)
+                }
             }.distinct()
         } else if (shared.getBoolean("byedpi_enable_cmd_settings", false) && savedCmd.isNotEmpty()) {
             listOf(savedCmd)
@@ -436,12 +440,14 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val port = sessionSocksPort
         val userDns = sharedPreferences.getString("dns_ip", null)
         val ipv6 = sharedPreferences.getBoolean("ipv6_enable", false)
+        val cellular = NetworkHelper.isCellular(this)
+        val mtu = if (cellular) 1500 else 8500
 
         val tun2socksConfig = """
         | misc:
         |   task-stack-size: 81920
         | socks5:
-        |   mtu: 8500
+        |   mtu: $mtu
         |   address: 127.0.0.1
         |   port: $port
         |   udp: udp
@@ -555,7 +561,9 @@ class ByeDpiVpnService : LifecycleVpnService() {
         }
 
         val prefs = getPreferences()
-        val onlyTargets = prefs.getBoolean("only_target_apps", true)
+        val cellular = NetworkHelper.isCellular(this)
+        // Per-app VPN on LTE often misses GMS/WebView DNS — full tunnel on mobile data.
+        val onlyTargets = prefs.getBoolean("only_target_apps", true) && !cellular
         val tgWs = prefs.getBoolean("tg_ws_telegram", true)
         val installed = if (onlyTargets) {
             AppTargets.vpnCapturePackages(this, excludeTelegram = tgWs)
@@ -572,6 +580,9 @@ class ByeDpiVpnService : LifecycleVpnService() {
                     Log.w(TAG, "Package not found: $pkg")
                 }
             }
+        } else if (cellular) {
+            Log.i(TAG, "Full tunnel on cellular (all apps except DpiBypass)")
+            builder.addDisallowedApplication(applicationContext.packageName)
         } else if (onlyTargets && tgWs) {
             Log.w(TAG, "No YouTube/Instagram in package list — capturing all apps except DpiBypass")
             builder.addDisallowedApplication(applicationContext.packageName)

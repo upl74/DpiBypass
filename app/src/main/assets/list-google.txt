@@ -1,6 +1,8 @@
 gstatic.com
+google.com
 googleapis.com
 googleusercontent.com
+ggpht.com
 gvt1.com
 android.googleapis.com
 clients.google.com
@@ -25,3 +27,7 @@ ytimg.com
 ytimg.l.google.com
 play.google.com
 google.ru
+accounts.google.com
+oauth2.googleapis.com
+play.googleapis.com
+firebaseinstallations.googleapis.com

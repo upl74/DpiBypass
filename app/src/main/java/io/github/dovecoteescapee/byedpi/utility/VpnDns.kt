@@ -5,15 +5,23 @@ import android.net.ConnectivityManager
 import android.net.LinkProperties
 
 object VpnDns {
-    /** System DNS first, then user override — Google DNS alone often breaks YT in RU. */
+    /**
+     * Wi‑Fi: системный DNS первым (Google DNS alone часто ломает YT в RU).
+     * LTE: публичные резолверы первым — DNS МТС/МГТС часто подменяет Google.
+     */
     fun resolveServers(context: Context, userDns: String?): List<String> {
+        val user = userDns?.trim().orEmpty()
+        if (NetworkHelper.isCellular(context)) {
+            val primary = user.ifEmpty { "9.9.9.9" }
+            return listOf(primary, "1.1.1.1", "77.88.8.8", "8.8.8.8").distinct()
+        }
+
         val servers = mutableListOf<String>()
         for (dns in readSystemDns(context)) {
             if (dns !in servers) {
                 servers.add(dns)
             }
         }
-        val user = userDns?.trim().orEmpty()
         if (user.isNotEmpty() && user !in servers) {
             servers.add(user)
         }

@@ -14,7 +14,7 @@ object DpiDefaults {
 
     private const val PREFS_VERSION_KEY = "dpi_defaults_version"
 
-    const val CURRENT_VERSION = 18
+    const val CURRENT_VERSION = 19
 
 
 
@@ -92,7 +92,11 @@ object DpiDefaults {
         "$BIND -Ku -a3 -Kt,h -o1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s " +
         "-a1 -At,r,s -d1 -f-1 -r2+s -An"
 
-    /** МТС hagnozo + полный whitelist Google (list-google.txt). */
+    /** МТС — Fake + split (ByeDPIAndroid #41). */
+    const val PRESET_MTS_FAKE =
+        "$BIND -Kt,h -d1 -d3+s -s6+s -d9+s -r1+s -a1 -Mh,d,r -d1 -f-1 -t 7 -n yandex.ru -e a -Ku -a3"
+
+    /** @deprecated -H whitelist отбрасывает домены вне списка — не использовать в auto-probe. */
     fun mtsHostsPreset(context: Context): String {
         val h = HostsAssets.googleHostsSwitch(context)
         return "$BIND $h -Kt,h -o1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s " +
@@ -123,20 +127,15 @@ object DpiDefaults {
         else -> PRESET_YOUTUBE_BASE
     }
 
-    /** Порядок кандидатов для runtime-probe на сотовой сети. */
+    /** Порядок кандидатов для runtime-probe на сотовой сети (без -H: whitelist рвёт YT). */
     fun cellularProbePresets(context: Context, savedCmd: String?): List<String> {
-        val isMts = NetworkHelper.isMts(context)
         val candidates = mutableListOf<String>()
-        if (isMts) {
-            candidates += mtsHostsPreset(context)
-            candidates += PRESET_MTS_405_QUIC
-            candidates += PRESET_MTS_405
-            candidates += PRESET_MTS_ALT
-        }
+        candidates += PRESET_MTS_405_QUIC
+        candidates += PRESET_MTS_405
+        candidates += PRESET_MTS_FAKE
+        candidates += PRESET_MTS_ALT
+        candidates += PRESET_YOUTUBE_MOBILE
         savedCmd?.trim()?.takeIf { it.isNotEmpty() }?.let { candidates += it }
-        if (!isMts) {
-            candidates += PRESET_YOUTUBE_MOBILE
-        }
         candidates += PRESET_YOUTUBE_BASE
         candidates += PRESET_GOODBYEDPI_LITE
         candidates += PRESET_HYBRID
@@ -222,7 +221,7 @@ object DpiDefaults {
         val editor = prefs.edit().putInt(PREFS_VERSION_KEY, CURRENT_VERSION)
         when {
             version == 0 -> applyFreshInstall(editor, context)
-            version < 18 -> applyCellularProbeFix(editor, context, prefs)
+            version < 19 -> applyMtsTunnelFix(editor, context, prefs)
         }
         editor.apply()
     }
@@ -245,8 +244,8 @@ object DpiDefaults {
             .putString("dns_ip", "")
     }
 
-    /** v18: runtime-probe пресетов + обновлённые MTS #405. */
-    private fun applyCellularProbeFix(
+    /** v19: полный туннель на LTE, публичный DNS, сброс кэша пресета. */
+    private fun applyMtsTunnelFix(
         editor: android.content.SharedPreferences.Editor,
         context: Context,
         prefs: android.content.SharedPreferences,
@@ -257,7 +256,7 @@ object DpiDefaults {
         }
         editor.remove("byedpi_cellular_working_cmd")
         editor.putBoolean("ipv6_enable", false)
-        if (NetworkHelper.isMts(context) && prefs.getString("dns_ip", "")?.isBlank() != false) {
+        if (NetworkHelper.isCellular(context) || NetworkHelper.isMts(context)) {
             editor.putString("dns_ip", "9.9.9.9")
         }
     }

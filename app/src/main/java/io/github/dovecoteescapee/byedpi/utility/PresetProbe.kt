@@ -7,25 +7,29 @@ import java.net.Proxy
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
-/** Quick HTTPS check through local ByeDPI SOCKS — socket open ≠ bypass works. */
+/** HTTPS check through local ByeDPI SOCKS — socket open ≠ bypass works. */
 object PresetProbe {
     private val TAG = PresetProbe::class.java.simpleName
 
     private val TEST_URLS = arrayOf(
         "https://www.youtube.com/generate_204",
         "https://youtubei.googleapis.com/",
-        "https://gstatic.com/generate_204",
+        "https://www.gstatic.com/generate_204",
+        "https://i.ytimg.com/generate_204",
     )
 
-    fun testBypass(socksPort: Int, timeoutMs: Int = 10_000): Boolean {
+    /** At least two endpoints must respond — one success is not enough on strict DPI. */
+    fun testBypass(socksPort: Int, timeoutMs: Int = 12_000): Boolean {
         val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort))
+        var ok = 0
         for (url in TEST_URLS) {
             if (testUrl(proxy, url, timeoutMs)) {
-                Log.i(TAG, "Probe OK via $url")
-                return true
+                ok++
+                Log.i(TAG, "Probe OK ($ok): $url")
+                if (ok >= 2) return true
             }
         }
-        Log.w(TAG, "Probe failed on all URLs (port=$socksPort)")
+        Log.w(TAG, "Probe failed: $ok/${TEST_URLS.size} URLs (port=$socksPort)")
         return false
     }
 
@@ -38,8 +42,7 @@ object PresetProbe {
                 instanceFollowRedirects = false
                 requestMethod = "GET"
             }
-            val code = conn.responseCode
-            code in 200..499
+            conn.responseCode in 200..499
         } catch (e: Exception) {
             Log.d(TAG, "Probe $urlString: ${e.javaClass.simpleName}")
             false
