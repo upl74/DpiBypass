@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw
 from core import autostart
 from core.admin import is_admin, relaunch_as_admin
 from core.config import AppConfig, load_config, save_config
-from core.engine import BypassEngine
+from core.engine import BypassEngine, ComponentId
 from core.paths import BYEDPI_EXE, WINDOWS_ROOT
 from core.presets import PRESET_LABELS
 from core.tgws import TgWsService
@@ -24,7 +24,7 @@ from core.winws import is_available as winws_available
 
 from ui.discord_tune import DiscordTuneDialog
 
-APP_VERSION = "1.3.7"
+APP_VERSION = "1.3.8"
 
 # Material 3 palette (synced with Android DpiBypass)
 PRIMARY = "#0EA5E9"
@@ -202,9 +202,10 @@ class MainWindow(ctk.CTk):
 
         self.sw_byedpi = ctk.CTkSwitch(
             bypass,
-            text="ByeDPI (YouTube / Discord / Instagram)",
+            text="ByeDPI — YouTube / Instagram (SOCKS)",
             font=ctk.CTkFont(size=14),
             progress_color=PRIMARY,
+            command=lambda: self._on_component_switch(ComponentId.BYEDPI),
         )
         if self.cfg.enable_byedpi:
             self.sw_byedpi.select()
@@ -212,10 +213,10 @@ class MainWindow(ctk.CTk):
 
         self.sw_discord = ctk.CTkSwitch(
             bypass,
-            text="Discord: WinDivert (нужен запуск от администратора)",
+            text="Discord — zapret / WinDivert (нужен администратор)",
             font=ctk.CTkFont(size=14),
             progress_color=PRIMARY,
-            command=self._on_discord_toggle,
+            command=lambda: self._on_component_switch(ComponentId.DISCORD),
         )
         if self.cfg.enable_discord:
             self.sw_discord.select()
@@ -223,9 +224,10 @@ class MainWindow(ctk.CTk):
 
         self.sw_sys = ctk.CTkSwitch(
             bypass,
-            text="Системный SOCKS (браузер + Discord в браузере)",
+            text="Системный SOCKS — браузер (требует ByeDPI)",
             font=ctk.CTkFont(size=14),
             progress_color=PRIMARY,
+            command=lambda: self._on_component_switch(ComponentId.SYS_PROXY),
         )
         if self.cfg.enable_sys_proxy:
             self.sw_sys.select()
@@ -233,9 +235,10 @@ class MainWindow(ctk.CTk):
 
         self.sw_tg = ctk.CTkSwitch(
             bypass,
-            text="Telegram WS-прокси",
+            text="Telegram — WS-прокси",
             font=ctk.CTkFont(size=14),
             progress_color=PRIMARY,
+            command=lambda: self._on_component_switch(ComponentId.TGWS),
         )
         if self.cfg.enable_tgws:
             self.sw_tg.select()
@@ -310,7 +313,7 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkLabel(
             scroll,
-            text=f"v{APP_VERSION} · Windows · Discord: автоподбор zapret",
+            text=f"v{APP_VERSION} · Windows · компоненты независимы",
             font=ctk.CTkFont(size=11),
             text_color=TEXT_MUTED,
         ).pack(anchor="w", padx=22, pady=(8, 20))
@@ -331,12 +334,55 @@ class MainWindow(ctk.CTk):
             zapret_preset=self.cfg.zapret_preset,
         )
 
-    def _on_discord_toggle(self) -> None:
-        if bool(self.sw_discord.get()):
-            label = PRESET_LABELS.get("universal", "")
-            if label in self.preset_box.cget("values"):
-                self.preset_box.set(label)
-        self._persist_switches()
+    def _is_component_enabled(self, component: ComponentId) -> bool:
+        mapping = {
+            ComponentId.BYEDPI: self.sw_byedpi,
+            ComponentId.DISCORD: self.sw_discord,
+            ComponentId.TGWS: self.sw_tg,
+            ComponentId.SYS_PROXY: self.sw_sys,
+        }
+        return bool(mapping[component].get())
+
+    def _set_component_switch(self, component: ComponentId, enabled: bool) -> None:
+        mapping = {
+            ComponentId.BYEDPI: self.sw_byedpi,
+            ComponentId.DISCORD: self.sw_discord,
+            ComponentId.TGWS: self.sw_tg,
+            ComponentId.SYS_PROXY: self.sw_sys,
+        }
+        if enabled:
+            mapping[component].select()
+        else:
+            mapping[component].deselect()
+
+    def _on_component_switch(self, component: ComponentId) -> None:
+        if component == ComponentId.BYEDPI and not self._is_component_enabled(ComponentId.BYEDPI):
+            self.sw_sys.deselect()
+        if component == ComponentId.SYS_PROXY and self._is_component_enabled(ComponentId.SYS_PROXY):
+            if not self._is_component_enabled(ComponentId.BYEDPI):
+                self.sw_sys.deselect()
+                mb.showwarning(
+                    "DpiBypass",
+                    "Системный SOCKS работает только вместе с ByeDPI.",
+                )
+                return
+
+        self.cfg = self._read_config()
+        save_config(self.cfg)
+        enabled = self._is_component_enabled(component)
+
+        try:
+            if enabled:
+                self._validate_component(component, self.cfg)
+                self.engine.start_component(component, self.cfg)
+            else:
+                self.engine.stop_component(component)
+        except Exception as e:
+            self._set_component_switch(component, not enabled)
+            self.cfg = self._read_config()
+            save_config(self.cfg)
+            self._handle_start_error(e)
+        self._refresh_status()
 
     def _persist_switches(self) -> None:
         self.cfg = self._read_config()
@@ -365,44 +411,66 @@ class MainWindow(ctk.CTk):
 
     def _refresh_status(self) -> None:
         on = self.engine.active
+        labels = self.engine.running_labels()
         self.status_dot.configure(text_color=OK if on else ERR)
-        self.status_text.configure(text="Обход активен" if on else "Выключено")
-        if self.cfg.enable_discord and not is_admin() and not on:
+        self.status_text.configure(text="Активно" if on else "Выключено")
+        if self.cfg.enable_discord and not is_admin() and not self.engine.is_running(ComponentId.DISCORD):
             hint = "Для Discord: запуск от администратора"
         elif on:
-            if self.cfg.enable_discord:
-                hint = f"ByeDPI + zapret ({self.cfg.zapret_preset})"
-            else:
-                hint = "ByeDPI и прокси работают в фоне"
+            hint = " · ".join(labels) if labels else "Компоненты запущены"
         else:
-            hint = "Нажмите кнопку ниже для запуска"
+            hint = "Включите нужные компоненты переключателями или кнопкой ниже"
         self.status_hint.configure(text=hint)
         self.btn_main.configure(
-            text="Выключить обход" if on else "Включить обход",
+            text="Выключить всё" if on else "Включить выбранное",
             fg_color=DISCONNECT if on else PRIMARY,
             hover_color="#DC2626" if on else PRIMARY_HOVER,
         )
-        state = "disabled" if on or self._busy else "normal"
-        self.preset_box.configure(state="disabled" if on or self._busy else "readonly")
-        for w in (self.sw_byedpi, self.sw_discord, self.sw_sys, self.sw_tg):
-            w.configure(state=state)
+        byedpi_on = self.engine.is_running(ComponentId.BYEDPI)
+        byedpi_enabled = self._is_component_enabled(ComponentId.BYEDPI)
+        self.preset_box.configure(state="disabled" if byedpi_on or self._busy else "readonly")
+        self.sw_sys.configure(state="normal" if byedpi_enabled else "disabled")
+        for sw in (self.sw_byedpi, self.sw_discord, self.sw_tg):
+            sw.configure(state="disabled" if self._busy else "normal")
 
-    def _validate_components(self, cfg: AppConfig) -> None:
-        if cfg.enable_byedpi and not BYEDPI_EXE.is_file():
-            raise FileNotFoundError(
-                "Нет ciadpi.exe — нажмите «Компоненты» для установки."
-            )
-        if cfg.enable_tgws and not TgWsService.is_available():
+    def _validate_component(self, component: ComponentId, cfg: AppConfig) -> None:
+        if component in (ComponentId.BYEDPI, ComponentId.SYS_PROXY):
+            if not BYEDPI_EXE.is_file():
+                raise FileNotFoundError(
+                    "Нет ciadpi.exe — нажмите «Компоненты» для установки."
+                )
+        if component == ComponentId.TGWS and not TgWsService.is_available():
             raise FileNotFoundError(
                 "Нет tg-ws-proxy — нажмите «Компоненты» для установки."
             )
-        if cfg.enable_discord:
+        if component == ComponentId.DISCORD:
             if not winws_available():
                 raise FileNotFoundError(
                     "Нет winws.exe (zapret) — нажмите «Компоненты» для загрузки."
                 )
             if not is_admin():
                 raise PermissionError("discord_admin")
+        if component == ComponentId.SYS_PROXY and not cfg.enable_byedpi:
+            raise RuntimeError("Системный SOCKS требует включённый ByeDPI.")
+
+    def _validate_components(self, cfg: AppConfig) -> None:
+        if not any(
+            (
+                cfg.enable_byedpi,
+                cfg.enable_discord,
+                cfg.enable_tgws,
+                cfg.enable_sys_proxy,
+            )
+        ):
+            raise RuntimeError("Включите хотя бы один компонент.")
+        if cfg.enable_byedpi or cfg.enable_sys_proxy:
+            self._validate_component(ComponentId.BYEDPI, cfg)
+        if cfg.enable_tgws:
+            self._validate_component(ComponentId.TGWS, cfg)
+        if cfg.enable_discord:
+            self._validate_component(ComponentId.DISCORD, cfg)
+        if cfg.enable_sys_proxy:
+            self._validate_component(ComponentId.SYS_PROXY, cfg)
 
     def _handle_start_error(self, e: Exception) -> None:
         if isinstance(e, PermissionError) and str(e) == "discord_admin":
@@ -459,23 +527,16 @@ class MainWindow(ctk.CTk):
 
     def _open_discord(self) -> None:
         try:
-            self.cfg = self._read_config()
-            if not self.cfg.enable_discord:
+            if not self._is_component_enabled(ComponentId.DISCORD):
                 self.sw_discord.select()
-                self.cfg.enable_discord = True
+            self.cfg = self._read_config()
+            self.cfg.enable_discord = True
             save_config(self.cfg)
 
-            if not winws_available():
-                raise FileNotFoundError(
-                    "Нет winws.exe (zapret) — нажмите «Компоненты» для загрузки."
-                )
-            if not is_admin():
-                raise PermissionError("discord_admin")
-
-            if not self.engine.active:
-                self._validate_components(self.cfg)
-                self.engine.start(self.cfg)
-                self._refresh_status()
+            self._validate_component(ComponentId.DISCORD, self.cfg)
+            if not self.engine.is_running(ComponentId.DISCORD):
+                self.engine.start_component(ComponentId.DISCORD, self.cfg)
+            self._refresh_status()
 
             DiscordTuneDialog(self, self.engine)
         except Exception as e:
@@ -483,9 +544,15 @@ class MainWindow(ctk.CTk):
 
     def _open_tg(self) -> None:
         try:
-            if not self.engine.tgws.running:
-                self.engine.tgws.start()
-                self._refresh_status()
+            if not self._is_component_enabled(ComponentId.TGWS):
+                self.sw_tg.select()
+            self.cfg = self._read_config()
+            self.cfg.enable_tgws = True
+            save_config(self.cfg)
+            self._validate_component(ComponentId.TGWS, self.cfg)
+            if not self.engine.is_running(ComponentId.TGWS):
+                self.engine.start_component(ComponentId.TGWS, self.cfg)
+            self._refresh_status()
             TgWsService.open_telegram_proxy()
         except Exception as e:
             mb.showerror("DpiBypass", str(e))

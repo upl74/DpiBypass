@@ -21,17 +21,6 @@ class AppConfig:
     zapret_preset: str = "general.bat"
 
 
-def effective_preset(cfg: AppConfig) -> str:
-    if cfg.enable_discord:
-        if cfg.preset in ("youtube", "universal"):
-            return "universal"
-        if cfg.preset == "discord":
-            return "discord"
-    if cfg.preset in ("universal", "discord"):
-        return "youtube"
-    return cfg.preset
-
-
 def load_config() -> AppConfig:
     ensure_dirs()
     if not CONFIG_FILE.exists():

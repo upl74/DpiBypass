@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,10 +46,9 @@ def resolve_preset_args(preset_name: str | None = None) -> list[str]:
 
 def parse_winws_args(bat_path: Path) -> list[str]:
     raw = bat_path.read_text(encoding="utf-8", errors="replace")
-    normalized = re.sub(r"\^\s*\r?\n", " ", raw)
-    normalized = re.sub(r"\s+", " ", normalized)
+    flat = re.sub(r"\^\s*\r?\n", " ", raw)
+    flat = re.sub(r"\s+", " ", flat)
 
-    flat = re.sub(r"\s+", " ", normalized)
     match = re.search(r'winws\.exe"\s+(.+)', flat, re.I)
     if not match:
         match = re.search(r"winws\.exe\s+(.+)", flat, re.I)
@@ -68,25 +66,58 @@ def parse_winws_args(bat_path: Path) -> list[str]:
 
     tail = tail.replace("%BIN%", bin_p).replace("%LISTS%", lists_p)
     tail = tail.replace("%GameFilterTCP%", "").replace("%GameFilterUDP%", "")
-    tail = re.sub(r",\s*,", ",", tail)
-    tail = re.sub(r",\s+--", " --", tail)
-    tail = re.sub(r"--wf-tcp=([0-9,]+),", r"--wf-tcp=\1", tail)
-    tail = re.sub(r"--wf-udp=([0-9,\-]+),", r"--wf-udp=\1", tail)
+    tail = re.sub(r"(--wf-tcp=[0-9,]+),", r"\1", tail)
+    tail = re.sub(r"(--wf-udp=[0-9,\-]+),", r"\1", tail)
 
-    tokens = shlex.split(tail, posix=False)
+    tokens = _tokenize_winws_tail(tail)
     cleaned: list[str] = []
     for token in tokens:
-        t = token.strip().strip('"')
-        if not t:
-            continue
-        if t.endswith("=") and t.startswith("--"):
-            continue
-        if "=" in t:
-            _, value = t.split("=", 1)
+        if "=" in token:
+            key, value = token.split("=", 1)
+            value = value.strip().strip('"')
             if not value:
                 continue
-        cleaned.append(t)
+            cleaned.append(f"{key}={value}")
+        else:
+            cleaned.append(token)
+
     return [str(WINWS_EXE), *cleaned]
+
+
+def _tokenize_winws_tail(tail: str) -> list[str]:
+    tokens: list[str] = []
+    i = 0
+    n = len(tail)
+    while i < n:
+        while i < n and tail[i].isspace():
+            i += 1
+        if i >= n:
+            break
+        if tail[i : i + 2] != "--":
+            i += 1
+            continue
+
+        j = i + 2
+        in_quote = False
+        while j < n:
+            ch = tail[j]
+            if ch == '"':
+                in_quote = not in_quote
+                j += 1
+                continue
+            if ch == " " and not in_quote:
+                k = j
+                while k < n and tail[k].isspace():
+                    k += 1
+                if k < n and tail[k : k + 2] == "--":
+                    break
+            j += 1
+
+        token = tail[i:j].strip()
+        if token:
+            tokens.append(token)
+        i = j
+    return tokens
 
 
 def _display_label(filename: str) -> str:

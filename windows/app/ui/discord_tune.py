@@ -114,12 +114,12 @@ class DiscordTuneDialog(ctk.CTkToplevel):
             if not self._cancel.is_set():
                 self._on_progress(done, total, label, message)
 
-        def done(best: str | None, score: int, _all_results: dict) -> None:
-            self.after(0, lambda: self._finish(best, score))
+        def done(best: str | None, score: int, all_results: list) -> None:
+            self.after(0, lambda: self._finish(best, score, all_results))
 
         run_benchmark(self.engine.winws, progress, done, self._cancel)
 
-    def _finish(self, best: str | None, score: int) -> None:
+    def _finish(self, best: str | None, score: int, all_results: list | None = None) -> None:
         if self._done:
             return
         self._done = True
@@ -128,6 +128,17 @@ class DiscordTuneDialog(ctk.CTkToplevel):
         if self._cancel.is_set():
             self.status.configure(text="Отменено")
             return
+
+        if all_results:
+            ranked = sorted(
+                all_results,
+                key=lambda item: (-item.score, -item.ok_count, item.name.lower()),
+            )
+            self._append_log("\n--- Рейтинг пресетов ---")
+            for idx, item in enumerate(ranked[:5], start=1):
+                self._append_log(
+                    f"{idx}. {item.label}: балл {item.score}, {item.ok_count} OK"
+                )
 
         if not best or score <= 0:
             self.status.configure(text="Пресеты не прошли curl-проверку, применён general.bat")

@@ -13,7 +13,6 @@ from .zapret_presets import ZapretPreset, default_preset_name, list_presets
 
 CREATE_NO_WINDOW = 0x08000000
 
-# updates.discord.com — зависание на «Checking for updates…»
 DISCORD_TARGETS: list[tuple[str, str, int]] = [
     ("Discord Updates", "https://updates.discord.com", 6),
     ("Discord Gateway", "https://gateway.discord.gg", 4),
@@ -22,8 +21,6 @@ DISCORD_TARGETS: list[tuple[str, str, int]] = [
     ("Discord Media", "https://discord.media", 2),
 ]
 
-DISCORD_MAX_SCORE = sum(w for _, _, w in DISCORD_TARGETS)
-
 _CURL_PROFILES: list[tuple[str, list[str]]] = [
     ("TLS1.3", ["--tlsv1.3", "--tls-max", "1.3"]),
     ("TLS1.2", ["--tlsv1.2", "--tls-max", "1.2"]),
@@ -31,7 +28,7 @@ _CURL_PROFILES: list[tuple[str, list[str]]] = [
 ]
 
 ProgressCb = Callable[[int, int, str, str], None]
-DoneCb = Callable[[str | None, int, dict[str, dict[str, str]]], None]
+DoneCb = Callable[[str | None, int, list["PresetScore"]], None]
 
 
 @dataclass
@@ -39,11 +36,11 @@ class PresetScore:
     name: str
     label: str
     score: int
+    ok_count: int
     details: dict[str, str]
 
 
 def probe_url(url: str, timeout: int = 5) -> tuple[bool, str]:
-    """Как в zapret test zapret.ps1: успех если curl завершился с кодом 0."""
     last = "no response"
     for label, extra in _CURL_PROFILES:
         try:
@@ -99,13 +96,33 @@ def score_preset(winws: WinWsService, preset: ZapretPreset, settle_s: float = 5.
     time.sleep(settle_s)
 
     total = 0
+    ok_count = 0
     details: dict[str, str] = {}
     for label, url, weight in DISCORD_TARGETS:
         ok, info = probe_url(url)
         details[label] = f"OK {info}" if ok else f"FAIL {info}"
         if ok:
             total += weight
-    return PresetScore(name=preset.name, label=preset.label, score=total, details=details)
+            ok_count += 1
+    return PresetScore(
+        name=preset.name,
+        label=preset.label,
+        score=total,
+        ok_count=ok_count,
+        details=details,
+    )
+
+
+def _pick_best(results: list[PresetScore]) -> PresetScore | None:
+    if not results:
+        return None
+    ranked = sorted(
+        results,
+        key=lambda item: (-item.score, -item.ok_count, item.name.lower()),
+    )
+    if ranked[0].score <= 0:
+        return None
+    return ranked[0]
 
 
 def run_benchmark(
@@ -116,13 +133,11 @@ def run_benchmark(
 ) -> None:
     presets = list_presets()
     if not presets:
-        on_done(None, 0, {})
+        on_done(None, 0, [])
         return
 
     cancel = cancel or Event()
-    all_results: dict[str, dict[str, str]] = {}
-    best_name: str | None = None
-    best_score = -1
+    results: list[PresetScore] = []
 
     try:
         for idx, preset in enumerate(presets):
@@ -141,10 +156,11 @@ def run_benchmark(
                     name=preset.name,
                     label=preset.label,
                     score=0,
+                    ok_count=0,
                     details={"Ошибка": str(exc)},
                 )
 
-            all_results[preset.name] = scored.details
+            results.append(scored)
             detail_line = " · ".join(
                 f"{k}: {v}" for k, v in scored.details.items()
             )
@@ -152,25 +168,26 @@ def run_benchmark(
                 idx + 1,
                 len(presets),
                 preset.label,
-                f"{preset.label} — балл {scored.score}\n{detail_line}",
+                f"{preset.label} — балл {scored.score} ({scored.ok_count} OK)\n{detail_line}",
             )
-            if scored.score > best_score:
-                best_score = scored.score
-                best_name = preset.name
-            if scored.score >= DISCORD_MAX_SCORE:
-                on_progress(
-                    len(presets),
-                    len(presets),
-                    preset.label,
-                    f"{preset.label} — идеальный результат, остальные пресеты пропущены",
-                )
-                break
     finally:
-        chosen = best_name if best_score > 0 else default_preset_name()
+        best = _pick_best(results)
+        chosen = best.name if best else default_preset_name()
         winws.stop()
         time.sleep(0.4)
         try:
             winws.start_preset(chosen)
         except Exception:
             pass
-        on_done(best_name if best_score > 0 else None, best_score, all_results)
+
+        if best:
+            on_progress(
+                len(presets),
+                len(presets),
+                best.label,
+                (
+                    f"\n>>> Лучший из {len(results)}: {best.name} "
+                    f"(балл {best.score}, {best.ok_count} OK)"
+                ),
+            )
+        on_done(best.name if best else None, best.score if best else 0, results)
