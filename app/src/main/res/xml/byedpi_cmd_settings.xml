@@ -14,13 +14,13 @@
 
     <androidx.preference.PreferenceCategory>
 
-        <ListPreference
+        <DropDownPreference
             android:key="byedpi_cmd_preset"
             android:title="@string/cmd_preset_setting"
             android:summary="@string/cmd_preset_summary"
             android:entries="@array/byedpi_cmd_presets"
             android:entryValues="@array/byedpi_cmd_presets_entries"
-            android:defaultValue="goodbyedpi"
+            android:defaultValue="youtube"
             app:useSimpleSummaryProvider="true" />
 
         <com.takisoft.preferencex.EditTextPreference

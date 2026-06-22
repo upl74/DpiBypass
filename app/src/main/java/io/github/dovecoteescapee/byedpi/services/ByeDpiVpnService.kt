@@ -218,6 +218,12 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val tgWs = shared.getBoolean("tg_ws_telegram", true)
         val port = sessionSocksPort
         val attempts = buildList {
+            if (shared.getBoolean("byedpi_enable_cmd_settings", false)) {
+                val cmd = shared.getString("byedpi_cmd_args", null)?.trim().orEmpty()
+                if (cmd.isNotEmpty()) {
+                    add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(cmd, port)))
+                }
+            }
             if (tgWs) {
                 add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_YOUTUBE, port)))
                 add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MEDIA_TCP, port)))

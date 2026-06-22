@@ -32,14 +32,15 @@
         <com.takisoft.preferencex.EditTextPreference
             android:key="dns_ip"
             android:title="@string/dbs_ip_setting"
-            android:defaultValue="8.8.8.8"
+            android:summary="@string/dns_ip_summary"
+            android:defaultValue=""
             app:useSimpleSummaryProvider="true" />
 
         <SwitchPreference
             android:key="ipv6_enable"
             android:title="@string/ipv6_setting"
             android:summary="@string/ipv6_summary"
-            android:defaultValue="true" />
+            android:defaultValue="false" />
 
         <SwitchPreference
             android:key="tg_ws_telegram"
@@ -66,14 +67,13 @@
         <Preference
             android:key="byedpi_ui_settings"
             android:title="@string/ui_editor"
-            app:useSimpleSummaryProvider="true"
-            app:fragment="io.github.dovecoteescapee.byedpi.fragments.ByeDpiUISettingsFragment" />
+            app:useSimpleSummaryProvider="true" />
 
         <Preference
             android:key="byedpi_cmd_settings"
             android:title="@string/command_line_editor"
-            app:useSimpleSummaryProvider="true"
-            app:fragment="io.github.dovecoteescapee.byedpi.fragments.ByeDpiCommandLineSettingsFragment" />
+            android:summary="@string/command_line_editor_summary"
+            app:useSimpleSummaryProvider="true" />
 
     </androidx.preference.PreferenceCategory>
 

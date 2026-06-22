@@ -5,20 +5,21 @@ import android.net.ConnectivityManager
 import android.net.LinkProperties
 
 object VpnDns {
-    /** User DNS first, then ISP/system DNS — avoids relying only on blocked 8.8.8.8. */
+    /** System DNS first, then user override — Google DNS alone often breaks YT in RU. */
     fun resolveServers(context: Context, userDns: String?): List<String> {
         val servers = mutableListOf<String>()
-        val user = userDns?.trim().orEmpty()
-        if (user.isNotEmpty()) {
-            servers.add(user)
-        }
         for (dns in readSystemDns(context)) {
             if (dns !in servers) {
                 servers.add(dns)
             }
         }
+        val user = userDns?.trim().orEmpty()
+        if (user.isNotEmpty() && user !in servers) {
+            servers.add(user)
+        }
         if (servers.isEmpty()) {
-            servers.add("8.8.8.8")
+            servers.add("77.88.8.8")
+            servers.add("1.1.1.1")
         }
         return servers
     }

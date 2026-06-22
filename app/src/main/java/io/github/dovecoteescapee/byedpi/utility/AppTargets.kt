@@ -31,6 +31,8 @@ object AppTargets {
         // Google Play Services (stock YouTube / часть Instagram)
         "com.google.android.gms",
         "com.google.android.gsf",
+        "com.google.android.googlequicksearchbox",
+        "com.google.android.configupdater",
         // Meta / Instagram
         "com.facebook.services",
         "com.facebook.system",
@@ -85,6 +87,8 @@ object AppTargets {
     private val vpnCompanionPackages: List<String> = listOf(
         "com.google.android.gms",
         "com.google.android.gsf",
+        "com.google.android.googlequicksearchbox",
+        "com.google.android.configupdater",
         "com.android.chrome",
         "com.google.android.webview",
         "com.facebook.services",

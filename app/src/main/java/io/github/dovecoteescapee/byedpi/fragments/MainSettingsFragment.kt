@@ -8,6 +8,8 @@ import androidx.preference.*
 import io.github.dovecoteescapee.byedpi.BuildConfig
 import io.github.dovecoteescapee.byedpi.R
 import io.github.dovecoteescapee.byedpi.data.Mode
+import io.github.dovecoteescapee.byedpi.fragments.ByeDpiCommandLineSettingsFragment
+import io.github.dovecoteescapee.byedpi.fragments.ByeDpiUISettingsFragment
 import io.github.dovecoteescapee.byedpi.utility.*
 
 class MainSettingsFragment : PreferenceFragmentCompat() {
@@ -56,13 +58,33 @@ class MainSettingsFragment : PreferenceFragmentCompat() {
 
         val setByeDpiSettingsMode = { enable: Boolean ->
             uiSettings.isEnabled = !enable
-            cmdSettings.isEnabled = enable
         }
 
         setByeDpiSettingsMode(switchCommandLineSettings.isChecked)
 
         switchCommandLineSettings.setOnPreferenceChangeListener { _, newValue ->
             setByeDpiSettingsMode(newValue as Boolean)
+            true
+        }
+
+        fun openSettingsFragment(fragment: androidx.fragment.app.Fragment) {
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.settings, fragment)
+                .addToBackStack("main_settings")
+                .commit()
+        }
+
+        uiSettings.setOnPreferenceClickListener {
+            openSettingsFragment(ByeDpiUISettingsFragment())
+            true
+        }
+
+        cmdSettings.setOnPreferenceClickListener {
+            if (!switchCommandLineSettings.isChecked) {
+                switchCommandLineSettings.isChecked = true
+                setByeDpiSettingsMode(true)
+            }
+            openSettingsFragment(ByeDpiCommandLineSettingsFragment())
             true
         }
 

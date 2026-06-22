@@ -14,7 +14,7 @@ object DpiDefaults {
 
     private const val PREFS_VERSION_KEY = "dpi_defaults_version"
 
-    const val CURRENT_VERSION = 13
+    const val CURRENT_VERSION = 14
 
 
 
@@ -164,7 +164,7 @@ object DpiDefaults {
 
             .putBoolean("byedpi_enable_cmd_settings", true)
 
-            .putBoolean("ipv6_enable", true)
+            .putBoolean("ipv6_enable", false)
 
             .putBoolean("tg_ws_telegram", true)
             .putBoolean("tg_ws_auto_apply", true)
@@ -177,7 +177,7 @@ object DpiDefaults {
 
             .putString("byedpi_proxy_port", "1080")
 
-            .putString("dns_ip", "8.8.8.8")
+            .putString("dns_ip", "")
 
             .apply()
 

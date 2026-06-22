@@ -35,7 +35,9 @@
     <string name="notification_title">DpiBypass</string>
     <string name="proxy_notification_content">Локальный SOCKS</string>
     <string name="general_category">Общие</string>
-    <string name="ipv6_summary">Включить для мобильного интернета (иначе трафик может обходить VPN)</string>
+    <string name="ipv6_summary">По умолчанию выключено — IPv6 часто ломает YouTube через VPN</string>
+    <string name="command_line_editor_summary">Откроется даже без переключателя — режим командной строки включится автоматически</string>
+    <string name="dns_ip_summary">Оставьте пустым — будет DNS оператора (лучше для YouTube)</string>
     <string name="no_target_apps">Не найдены Telegram/YouTube — установите приложения или отключите «Только TG/YT»</string>
     <string name="no_target_apps_warn">TG/YouTube не обнаружены — VPN попробует найти их автоматически</string>
     <string name="failed_to_start">Не удалось запустить %1$s</string>

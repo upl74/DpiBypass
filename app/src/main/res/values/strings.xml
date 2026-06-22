@@ -67,6 +67,8 @@
     <string name="byedpi_category">ByeDPI</string>
     <string name="about_category">About</string>
     <string name="command_line_editor">Command line editor</string>
+    <string name="command_line_editor_summary">Opens even if the switch above is off — enables command line mode automatically</string>
+    <string name="dns_ip_summary">Leave empty to use ISP DNS (recommended for YouTube)</string>
     <string name="ui_editor">UI editor</string>
     <string name="use_command_line_settings">Use command line settings</string>
     <string name="desync_http">Desync HTTP</string>
@@ -83,7 +85,7 @@
     <string name="byedpi_tcp_fast_open_setting">TCP Fast Open</string>
     <string name="byedpi_udp_fake_count">UDP fake count</string>
     <string name="ipv6_setting">IPv6</string>
-    <string name="ipv6_summary">Включить для мобильного интернета (иначе трафик может обходить VPN)</string>
+    <string name="ipv6_summary">Off by default — IPv6 often breaks YouTube over VPN</string>
     <string name="no_target_apps">Не найдены Telegram/YouTube — установите приложения или отключите «Только TG/YT»</string>
     <string name="no_target_apps_warn">TG/YouTube не обнаружены по имени — VPN запустится для всех приложений с ярлыком telegram/youtube</string>
     <string name="byedpi_fake_offset_setting">Fake offset</string>
