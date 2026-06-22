@@ -1,0 +1,14 @@
+# Discord domains (zapret / Flowseal list, trimmed)
+discord.com
+discord.gg
+discordapp.com
+discordapp.net
+discord.media
+discordcdn.com
+discordstatus.com
+gateway.discord.gg
+cdn.discordapp.com
+images-ext-1.discordapp.net
+media.discordapp.net
+discord-attachments-uploads-prd.storage.googleapis.com
+latency.discord.media

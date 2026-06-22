@@ -1,22 +1,34 @@
 import json
 from dataclasses import asdict, dataclass, fields
 
-from .paths import CONFIG_FILE, DATA_DIR, ensure_dirs
+from .paths import CONFIG_FILE, ensure_dirs
 
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 
 
 @dataclass
 class AppConfig:
     config_version: int = CONFIG_VERSION
-    preset: str = "youtube"
+    preset: str = "universal"
     enable_byedpi: bool = True
+    enable_discord: bool = True
     enable_tgws: bool = True
     enable_sys_proxy: bool = True
     socks_port: int = 1080
     minimize_to_tray: bool = True
     autostart: bool = False
     auto_enable: bool = False
+
+
+def effective_preset(cfg: AppConfig) -> str:
+    if cfg.enable_discord:
+        if cfg.preset in ("youtube", "universal"):
+            return "universal"
+        if cfg.preset == "discord":
+            return "discord"
+    if cfg.preset in ("universal", "discord"):
+        return "youtube"
+    return cfg.preset
 
 
 def load_config() -> AppConfig:
@@ -26,7 +38,10 @@ def load_config() -> AppConfig:
     try:
         data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
         valid = {f.name for f in fields(AppConfig)}
-        return AppConfig(**{k: data[k] for k in valid if k in data})
+        cfg = AppConfig(**{k: data[k] for k in valid if k in data})
+        if cfg.config_version < CONFIG_VERSION and cfg.preset == "youtube":
+            cfg.preset = "universal"
+        return cfg
     except (json.JSONDecodeError, TypeError, KeyError):
         return AppConfig()
 

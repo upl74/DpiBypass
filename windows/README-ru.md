@@ -19,6 +19,7 @@ cd C:\Projects\DpiBypass\windows
 - **Автовключение обхода** — при старте приложения
 - Сворачивание в **системный трей**
 - ByeDPI (YouTube/Instagram в браузере) + Telegram WS-прокси
+- **Discord** — UDP-обход, Drop SACK, запуск десктоп-клиента через SOCKS
 - Настройки: `%APPDATA%\DpiBypass\config.json`
 
 ## Использование

@@ -27,6 +27,7 @@ try {
         --paths (Join-Path $Root 'app') `
         --paths $TgVendor `
         --add-data $addData `
+        --add-data "$((Join-Path $Root 'app\data\discord-hosts.txt'));data" `
         --collect-submodules proxy `
         --collect-submodules utils `
         --hidden-import cryptography `

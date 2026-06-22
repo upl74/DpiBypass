@@ -15,12 +15,13 @@ from PIL import Image, ImageDraw
 
 from core import autostart
 from core.config import AppConfig, load_config, save_config
+from core.discord import launch_desktop as launch_discord
 from core.engine import BypassEngine
 from core.paths import BYEDPI_EXE, WINDOWS_ROOT
 from core.presets import PRESET_LABELS
 from core.tgws import TgWsService
 
-APP_VERSION = "1.3.3"
+APP_VERSION = "1.3.4"
 
 # Material 3 palette (synced with Android DpiBypass)
 PRIMARY = "#0EA5E9"
@@ -72,8 +73,8 @@ class MainWindow(ctk.CTk):
         self._busy = False
 
         self.title("DpiBypass")
-        self.geometry("460x640")
-        self.minsize(420, 580)
+        self.geometry("460x700")
+        self.minsize(420, 640)
         self.configure(fg_color=BG)
 
         self._build_ui()
@@ -130,7 +131,7 @@ class MainWindow(ctk.CTk):
         ).pack(anchor="w")
         ctk.CTkLabel(
             titles,
-            text="Telegram · YouTube · Instagram",
+            text="Telegram · YouTube · Discord · Instagram",
             font=ctk.CTkFont(size=13),
             text_color=TEXT_MUTED,
             anchor="w",
@@ -188,7 +189,7 @@ class MainWindow(ctk.CTk):
 
         self.sw_byedpi = ctk.CTkSwitch(
             bypass,
-            text="YouTube / Instagram (ByeDPI)",
+            text="ByeDPI (YouTube / Discord / Instagram)",
             font=ctk.CTkFont(size=14),
             progress_color=PRIMARY,
         )
@@ -196,9 +197,20 @@ class MainWindow(ctk.CTk):
             self.sw_byedpi.select()
         self.sw_byedpi.pack(anchor="w", padx=18, pady=5)
 
+        self.sw_discord = ctk.CTkSwitch(
+            bypass,
+            text="Discord: голосовой чат (UDP + Drop SACK)",
+            font=ctk.CTkFont(size=14),
+            progress_color=PRIMARY,
+            command=self._on_discord_toggle,
+        )
+        if self.cfg.enable_discord:
+            self.sw_discord.select()
+        self.sw_discord.pack(anchor="w", padx=18, pady=5)
+
         self.sw_sys = ctk.CTkSwitch(
             bypass,
-            text="Системный SOCKS (браузер Edge / Chrome)",
+            text="Системный SOCKS (браузер + Discord в браузере)",
             font=ctk.CTkFont(size=14),
             progress_color=PRIMARY,
         )
@@ -270,19 +282,22 @@ class MainWindow(ctk.CTk):
         row.pack(fill="x", padx=20, pady=(0, 8))
 
         btn_style = {"height": 38, "fg_color": SURFACE, "hover_color": SURFACE_2, "corner_radius": 12}
-        ctk.CTkButton(row, text="Telegram", width=130, command=self._open_tg, **btn_style).pack(
-            side="left", padx=(0, 8)
+        ctk.CTkButton(row, text="Discord", width=96, command=self._open_discord, **btn_style).pack(
+            side="left", padx=(0, 6)
         )
-        ctk.CTkButton(row, text="Компоненты", width=130, command=self._run_setup, **btn_style).pack(
-            side="left", padx=(0, 8)
+        ctk.CTkButton(row, text="Telegram", width=96, command=self._open_tg, **btn_style).pack(
+            side="left", padx=(0, 6)
         )
-        ctk.CTkButton(row, text="В трей", width=130, command=self._hide_to_tray, **btn_style).pack(
+        ctk.CTkButton(row, text="Компоненты", width=96, command=self._run_setup, **btn_style).pack(
+            side="left", padx=(0, 6)
+        )
+        ctk.CTkButton(row, text="В трей", width=96, command=self._hide_to_tray, **btn_style).pack(
             side="left"
         )
 
         ctk.CTkLabel(
             scroll,
-            text=f"v{APP_VERSION} · Windows · TG: WS · YT/IG: ByeDPI + SOCKS",
+            text=f"v{APP_VERSION} · Windows · TG: WS · YT/Discord: ByeDPI + SOCKS",
             font=ctk.CTkFont(size=11),
             text_color=TEXT_MUTED,
         ).pack(anchor="w", padx=22, pady=(8, 20))
@@ -293,6 +308,7 @@ class MainWindow(ctk.CTk):
         return AppConfig(
             preset=preset,
             enable_byedpi=bool(self.sw_byedpi.get()),
+            enable_discord=bool(self.sw_discord.get()),
             enable_tgws=bool(self.sw_tg.get()),
             enable_sys_proxy=bool(self.sw_sys.get()),
             minimize_to_tray=bool(self.sw_tray.get()),
@@ -300,6 +316,13 @@ class MainWindow(ctk.CTk):
             auto_enable=bool(self.sw_auto_enable.get()),
             socks_port=self.cfg.socks_port,
         )
+
+    def _on_discord_toggle(self) -> None:
+        if bool(self.sw_discord.get()):
+            label = PRESET_LABELS.get("universal", "")
+            if label in self.preset_box.cget("values"):
+                self.preset_box.set(label)
+        self._persist_switches()
 
     def _persist_switches(self) -> None:
         self.cfg = self._read_config()
@@ -340,7 +363,7 @@ class MainWindow(ctk.CTk):
         )
         state = "disabled" if on or self._busy else "normal"
         self.preset_box.configure(state="disabled" if on or self._busy else "readonly")
-        for w in (self.sw_byedpi, self.sw_sys, self.sw_tg):
+        for w in (self.sw_byedpi, self.sw_discord, self.sw_sys, self.sw_tg):
             w.configure(state=state)
 
     def _validate_components(self, cfg: AppConfig) -> None:
@@ -390,6 +413,18 @@ class MainWindow(ctk.CTk):
         except Exception as e:
             mb.showerror("DpiBypass", str(e))
             self._refresh_status()
+
+    def _open_discord(self) -> None:
+        try:
+            if not self.engine.active:
+                mb.showwarning(
+                    "DpiBypass",
+                    "Сначала включите обход, затем запустите Discord.",
+                )
+                return
+            launch_discord(self.cfg.socks_port)
+        except Exception as e:
+            mb.showerror("DpiBypass", str(e))
 
     def _open_tg(self) -> None:
         try:

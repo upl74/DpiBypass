@@ -2,7 +2,7 @@
 from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('C:\\Projects\\DpiBypass\\windows\\third_party\\tg-ws-proxy', 'tg-ws-proxy')]
+datas = [('C:\\Projects\\DpiBypass\\windows\\third_party\\tg-ws-proxy', 'tg-ws-proxy'), ('C:\\Projects\\DpiBypass\\windows\\app\\data\\discord-hosts.txt', 'data')]
 binaries = []
 hiddenimports = ['cryptography', 'winreg']
 hiddenimports += collect_submodules('proxy')
