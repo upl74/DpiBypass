@@ -219,27 +219,24 @@ class ByeDpiVpnService : LifecycleVpnService() {
         val port = sessionSocksPort
         val cellular = NetworkHelper.isCellular(this)
         val ytPreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubePreset(this), port)
+        val ytMobilePreset = LocalSocksPort.patchCmdPort(DpiDefaults.youtubeMobilePreset(this), port)
         val litePreset = LocalSocksPort.patchCmdPort(DpiDefaults.litePreset(this), port)
 
         val attempts = buildList {
             if (shared.getBoolean("byedpi_enable_cmd_settings", false)) {
                 val cmd = shared.getString("byedpi_cmd_args", null)?.trim().orEmpty()
                 if (cmd.isNotEmpty()) {
-                    val patched = HostsAssets.withGoogleHosts(cmd, this@ByeDpiVpnService)
-                    add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(patched, port)))
+                    add(ByeDpiProxyCmdPreferences(LocalSocksPort.patchCmdPort(cmd, port)))
                 }
             }
             if (cellular) {
-                add(ByeDpiProxyCmdPreferences(litePreset))
+                add(ByeDpiProxyCmdPreferences(ytMobilePreset))
             }
             if (tgWs) {
                 add(ByeDpiProxyCmdPreferences(ytPreset))
                 add(
                     ByeDpiProxyCmdPreferences(
-                        LocalSocksPort.patchCmdPort(
-                            HostsAssets.withGoogleHosts(DpiDefaults.PRESET_MEDIA_TCP, this@ByeDpiVpnService),
-                            port,
-                        ),
+                        LocalSocksPort.patchCmdPort(DpiDefaults.PRESET_MEDIA_TCP, port),
                     ),
                 )
             } else {
