@@ -17,6 +17,12 @@ TGWS_CONFIG = DATA_DIR / "tgws_config.json"
 TG_SECRET_LEGACY = DATA_DIR / "tg_secret.txt"
 DEFAULT_PORT = 1443
 DEFAULT_HOST = "127.0.0.1"
+# Flowseal / amurcanov: direct WS to DC .220; empty dc_ip = CF-only (fails on some operators)
+DEFAULT_DC_IP = [
+    "2:149.154.167.220",
+    "4:149.154.167.220",
+    "203:149.154.167.220",
+]
 
 _log = logging.getLogger("tgws")
 _logging_ready = False
@@ -56,17 +62,29 @@ def _load_tgws_config() -> dict:
             data = json.loads(TGWS_CONFIG.read_text(encoding="utf-8"))
             for key, value in defaults.items():
                 data.setdefault(key, value)
+            data["dc_ip"] = _normalize_dc_ip(data.get("dc_ip"))
             return data
         except (json.JSONDecodeError, OSError, TypeError):
             pass
 
     cfg = dict(defaults)
+    cfg["dc_ip"] = _normalize_dc_ip(cfg.get("dc_ip"))
     if TG_SECRET_LEGACY.is_file():
         secret = TG_SECRET_LEGACY.read_text(encoding="utf-8").strip()
         if len(secret) == 32:
             cfg["secret"] = secret
     _save_tgws_config(cfg)
     return cfg
+
+
+def _normalize_dc_ip(dc_ip: object) -> list[str]:
+    if not isinstance(dc_ip, list) or not dc_ip:
+        return list(DEFAULT_DC_IP)
+    merged = list(dc_ip)
+    for entry in DEFAULT_DC_IP:
+        if entry not in merged:
+            merged.append(entry)
+    return merged
 
 
 def _save_tgws_config(cfg: dict) -> None:

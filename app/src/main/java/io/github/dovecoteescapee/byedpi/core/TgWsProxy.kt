@@ -25,6 +25,13 @@ object TgWsProxy {
     const val BIND_IP = "127.0.0.1"
     const val DEFAULT_PORT = 1443
 
+    /**
+     * Direct WS targets (Flowseal / amurcanov defaults).
+     * Empty dc_ips forces CF-only fallback — breaks on some mobile operators.
+     */
+    private const val DEFAULT_DC_IPS =
+        "2:149.154.167.220,4:149.154.167.220,203:149.154.167.220"
+
     @Volatile
     private var running = false
 
@@ -65,7 +72,7 @@ object TgWsProxy {
                     SetPoolSize(4)
                     SetCfProxyCacheDir(cacheDir)
                     SetCfProxyConfig(1, 1, "")
-                    startCode.set(StartProxy(BIND_IP, port, "", secret, 1))
+                    startCode.set(StartProxy(BIND_IP, port, DEFAULT_DC_IPS, secret, 1))
                 }
             } catch (t: Throwable) {
                 startError.set(t)
