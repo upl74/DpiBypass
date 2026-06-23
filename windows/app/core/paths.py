@@ -11,7 +11,8 @@ def _windows_root() -> Path:
 
 WINDOWS_ROOT = _windows_root()
 BIN_DIR = WINDOWS_ROOT / "bin"
-DATA_DIR = Path(os.environ.get("APPDATA", "")) / "DpiBypass"
+_APP_DATA_NAME = os.environ.get("DPIBYPASS_APPDATA", "DpiBypass")
+DATA_DIR = Path(os.environ.get("APPDATA", "")) / _APP_DATA_NAME
 CONFIG_FILE = DATA_DIR / "config.json"
 
 BYEDPI_EXE = BIN_DIR / "ciadpi.exe"
